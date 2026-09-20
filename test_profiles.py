@@ -1,5 +1,6 @@
 """Smoke tests using temporary copies; never touch personal journals."""
 import json
+import os
 from pathlib import Path
 import shutil
 import socket
@@ -37,7 +38,7 @@ class Profiles(unittest.TestCase):
                     return json.load(response)
 
             for game, expected in [('game-a', 0), ('game-b', 0), ('game-a', 1)]:
-                proc = subprocess.Popen([sys.executable, str(root/'launch.py'), '--profile', game, '--port', str(port), '--no-browser', '--no-capture'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                proc = subprocess.Popen([sys.executable, str(root/'launch.py'), '--profile', game, '--port', str(port), '--no-browser', '--no-capture'], stdout=subprocess.PIPE, stderr=subprocess.PIPE,env=dict(os.environ,JP_READER_DICTIONARY_INDEX=str(root/'empty-index.sqlite3')))
                 ready = False
                 try:
                     for _ in range(100):
@@ -48,12 +49,17 @@ class Profiles(unittest.TestCase):
                                 self.fail(str(proc.communicate()))
                             time.sleep(.1)
                     self.assertTrue(ready, 'Server did not start')
+                    self.assertFalse(request('/api/state')['capture_enabled'])
                     request('/api/translation', {'enabled':False})
                     self.assertEqual(request('/api/sentences')['total'], expected)
                     self.assertEqual(request('/api/dictionary/catalog'), {'dictionaries': []})
                     if expected == 0:
-                        request('/api/add', {'japanese':'今日はいい天気ですね。'})
+                        block='今日はいい天気ですね。\n図書館で本を読みます。'
+                        saved=request('/api/add', {'japanese':block})
+                        self.assertEqual(saved['row']['japanese'],block)
+                        request('/api/preferences',{'fortune-dictionary-zoom':'120'})
                         self.assertEqual(request('/api/sentences')['total'], 1)
+                        with self.assertRaises(urllib.error.HTTPError):request('/api/add',{'japanese':'あ'*12001})
                 finally:
                     if ready:
                         request('/api/stop', {})

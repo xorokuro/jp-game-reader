@@ -15,3 +15,7 @@ __pycache__/
 *-key.txt
 local-settings.json
 .venv/
+runtime/
+portable/
+*.zip
+bundle-manifest.json

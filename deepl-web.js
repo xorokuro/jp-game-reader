@@ -1,6 +1,6 @@
 (() => {
  const status=document.getElementById('translation-state');
- const manual=document.createElement('button');manual.type='button';manual.textContent='Translate this sentence · Local model';
+ const manual=document.createElement('button');manual.id='translate-current';manual.type='button';manual.textContent='Translate this text · Local model';
  const hint=document.createElement('p');hint.className='muted';hint.textContent='Local translation: keep LM Studio open with your selected model loaded and its server on. Auto fills missing English + 繁體中文; turn Auto off for manual mode. Text stays on this computer.';
  const feedback=document.createElement('p');feedback.setAttribute('role','status');status.after(hint,manual,feedback);
  const controls=document.createElement('div');controls.className='toolbar';
@@ -10,6 +10,11 @@
  async function listModels(){
   try{const r=await fetch('/api/local-models');const data=await r.json();if(!r.ok)throw Error(data.error||'Start the LM Studio server first.');
    select.replaceChildren();for(const m of data.models){const option=document.createElement('option');option.value=m.id;option.textContent=m.id+' · '+m.quantization+(m.state==='loaded'?' · loaded':'');select.append(option);}select.value=data.selected;
+   if(!select.value&&data.models.length)select.value=data.models[0].id;
+   manual.disabled=!data.available;load.disabled=!data.available||!data.models.length;select.disabled=!data.available;
+   document.getElementById('paste-translate').disabled=!data.available;
+   if(!data.available)document.getElementById('paste-status').textContent='Reading and dictionaries are ready. No local AI is connected; use Copy learning prompt.';
+   feedback.textContent=data.available?'Local AI server connected. Choose a model, then load it.':data.message;
   }catch(e){feedback.textContent=e.message;}
  }
  refresh.onclick=listModels;

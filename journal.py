@@ -295,6 +295,7 @@ def main():
     journal.backup()
     journal.reconcile()
     journal.snapshot()
+    preferences_path=Path(args.database).parent/'preferences.json'
     config_path=Path(args.database).parent/'settings.json';settings={'process':'obs64','crop_top':.55,'crop_height':.43}
     if config_path.exists():settings.update(json.loads(config_path.read_text(encoding='utf-8')))
     corpus=[] # This game has no supplied extracted script.
@@ -366,6 +367,9 @@ def main():
         def do_GET(self):
             if not self.allowed():return self.send({'error':'Invalid host'},403)
             p=urlparse(self.path).path
+            if p=='/portable-preferences.js':
+                import preferences
+                return self.send(preferences.bootstrap(preferences_path),mime='text/javascript; charset=utf-8')
             if p=='/api/state':
                 with lock:
                     if state['retry']['pending'] and time.monotonic()>state['retry']['deadline']:
@@ -375,7 +379,7 @@ def main():
                         recent=journal.recent();current=journal.get(recent[0]['id']) if recent else None
                     pending=journal.pending()
                     for item in pending['rows']:item['suggestions']=matcher.suggest(item['text'])
-                    return self.send({**state,'last':current,'settings':settings,'translation_fields':True,'pending_ocr':pending,'recent':journal.recent(),'exports':{'pending':journal.export_pending.is_set(),'updated_at':journal.exported_at,'error':journal.export_error}})
+                    return self.send({**state,'workspace':str(Path(args.database).parent.resolve()),'capture_enabled':not args.no_capture,'last':current,'settings':settings,'translation_fields':True,'pending_ocr':pending,'recent':journal.recent(),'exports':{'pending':journal.export_pending.is_set(),'updated_at':journal.exported_at,'error':journal.export_error}})
             query=parse_qs(urlparse(self.path).query)
             try:
                 if p=='/api/local-models':
@@ -409,7 +413,7 @@ def main():
                         while chunk:=stream.read(65536):self.wfile.write(chunk)
                     return
             except (ValueError,KeyError) as e:return self.send({'error':str(e)},400)
-            if p in ['/','/index.html','/app.js','/translations.js','/style.css','/dictionary.js','/dictionary.css','/dictionary-entry.css','/deepl-web.js']:
+            if p in ['/','/index.html','/app.js','/translations.js','/style.css','/dictionary.js','/dictionary.css','/dictionary-entry.css','/deepl-web.js','/reader.js']:
                 name='index.html' if p=='/' else p[1:];mime={'html':'text/html','js':'text/javascript','css':'text/css'}[name.rsplit('.',1)[1]]
                 return self.send((HERE/name).read_bytes(),mime=mime+'; charset=utf-8')
             self.send({'error':'Not found'},404)
@@ -419,7 +423,11 @@ def main():
                 length=int(self.headers.get('Content-Length','0'))
                 if length>1000000:raise ValueError('Request too large')
                 body=json.loads(self.rfile.read(length) or b'{}')
-                if self.path=='/api/translation':
+                if self.path=='/api/preferences':
+                    import preferences
+                    with lock:preferences.save(preferences_path,body)
+                    return self.send({'ok':True})
+                elif self.path=='/api/translation':
                     with lock:
                         state['translation']['enabled']=bool(body['enabled'])
                         settings['auto_translate']=state['translation']['enabled']
@@ -463,7 +471,10 @@ def main():
                         restart.set()
                         if worker[0] and worker[0].poll() is None:worker[0].terminate()
                 elif self.path=='/api/add':
-                    with lock:state['last']=journal.record(str(body['japanese']).strip(),settings['process'],kind='manual');state['version']+=1
+                    text=body.get('japanese')
+                    if not isinstance(text,str) or not text.strip() or len(text)>12000:raise ValueError('Paste between 1 and 12,000 characters.')
+                    with lock:state['last']=journal.record(text.strip(),settings['process'],kind='manual');state['version']+=1;row=state['last']
+                    return self.send({'ok':True,'row':row})
                 elif self.path=='/api/decide-ocr':
                     if body.get('choice') not in ('keep','ignore','correct'):raise ValueError('Invalid choice')
                     with lock:
@@ -531,14 +542,14 @@ def main():
     journal.start_exports()
     import auto_translate
     if not settings.get('local_translation_initialized'):
-        settings.update(auto_translate=True,local_translation_initialized=True)
+        settings.update(auto_translate=False,local_translation_initialized=True)
         config_path.write_text(json.dumps(settings,indent=2),encoding='utf-8')
-    state['translation']={'enabled':settings.get('auto_translate',True),'provider':'LM Studio · Qwen3-14B (local)','status':'Local translation ready'}
+    state['translation']={'enabled':settings.get('auto_translate',True),'provider':'LM Studio · Qwen3-14B (local)','status':'Local translation is optional. Copy a learning prompt if no model is installed.'}
     import local_translate
     state['translation']['provider']='LM Studio · '+local_translate.MODEL+' (local)'
     local_translator=local_translate.Translator(journal,stop,state,lock)
     if not args.no_capture:threading.Thread(target=capture,daemon=True).start()
-    else:state['status']='Manual journal · capture disabled'
+    else:state['status']='Reading mode · Paste Japanese text to read and look up words'
     if not args.no_browser:webbrowser.open(origin)
     try:server.serve_forever()
     finally:

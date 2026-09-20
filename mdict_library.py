@@ -8,8 +8,15 @@ from urllib.parse import urlencode,unquote,urlsplit
 
 INDEX=Path(os.environ.get('JP_READER_DICTIONARY_INDEX',str(Path(__file__).resolve().parent/'dictionaries'/'mdict-index.sqlite3')))
 def connect():
-    db=sqlite3.connect('file:'+INDEX.as_posix()+'?mode=ro',uri=True);db.row_factory=sqlite3.Row
+    db=sqlite3.connect(INDEX.resolve().as_uri()+'?mode=ro',uri=True);db.row_factory=sqlite3.Row
     return db
+
+def source_path(value):
+    path=Path(value)
+    if path.is_absolute():return path
+    path=(INDEX.parent/path).resolve()
+    if not path.is_relative_to(INDEX.parent.resolve()):raise ValueError('Invalid dictionary source path.')
+    return path
 def normalize(word):return unicodedata.normalize('NFKC',word).strip().casefold()
 def dictionaries():
     if not INDEX.exists():return []
@@ -29,9 +36,11 @@ def search(word,codes=None):
     return result
 
 @lru_cache(maxsize=12)
-def block(path,offset,size,expected,mtime):
-    p=Path(path)
-    if not p.exists() or p.stat().st_mtime_ns!=mtime:raise ValueError('Dictionary source moved or changed; rebuild its index.')
+def block(path,offset,size,expected,mtime,source_size):
+    p=source_path(path)
+    # Portable USB copies may round timestamps. Size + each block checksum still
+    # validate relative-path archives without tying them to a drive or filesystem.
+    if not p.exists() or p.stat().st_size!=source_size or (Path(path).is_absolute() and p.stat().st_mtime_ns!=mtime):raise ValueError('Dictionary source moved or changed; rebuild its index.')
     with p.open('rb') as f:f.seek(offset);raw=f.read(size)
     mode,checksum=struct.unpack('<I',raw[:4])[0],struct.unpack('>I',raw[4:8])[0]
     if mode==2:data=zlib.decompress(raw[8:])
@@ -44,7 +53,7 @@ def read_record(db,row):
     spans=db.execute('SELECT * FROM blocks WHERE file=? AND start<? AND end>? ORDER BY start',(row['file'],row['end'],row['start'])).fetchall()
     chunks=[]
     for b in spans:
-        raw=block(source['path'],b['offset'],b['size'],b['end']-b['start'],source['mtime'])
+        raw=block(source['path'],b['offset'],b['size'],b['end']-b['start'],source['mtime'],source['size'])
         chunks.append(raw[max(0,row['start']-b['start']):min(len(raw),row['end']-b['start'])])
     return b''.join(chunks),source['encoding']
 def record(code,entry_id=None,word=None):
@@ -76,7 +85,7 @@ def media(code,name):
     with closing(connect()) as db:
         d=db.execute('SELECT * FROM dictionaries WHERE code=?',(code,)).fetchone()
         if d is None:raise ValueError('Unknown dictionary.')
-        root=Path(d['root']).resolve();file=(root/name).resolve()
+        root=source_path(d['root']).resolve();file=(root/name).resolve()
         if file.is_relative_to(root) and file.is_file() and file.suffix.lower() in ('.png','.jpg','.jpeg','.gif','.webp','.svg','.mp3','.wav','.ogg','.spx','.mp4','.woff','.woff2','.ttf','.otf'):
             data=file.read_bytes()
         else:
@@ -135,7 +144,7 @@ def collection_sections(text):
 def entry(code,entry_id=None,word=None):
     title,text=record(code,entry_id,word)
     with closing(connect()) as db:d=dict(db.execute('SELECT * FROM dictionaries WHERE code=?',(code,)).fetchone())
-    cssfile=Path(d['root'])/d['css'];css=cssfile.read_text(encoding='utf-8-sig') if cssfile.exists() else ''
+    cssfile=source_path(d['root'])/d['css'];css=cssfile.read_text(encoding='utf-8-sig') if cssfile.exists() else ''
     css=re.sub(r'@import[^;]+;','',css,flags=re.I)
     def cssurl(m):
         try:return 'url("'+route('media',code,name=resource_name(m[1].strip(' \"\'')))+'")'

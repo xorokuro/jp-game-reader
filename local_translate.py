@@ -9,8 +9,16 @@ except (OSError,ValueError,KeyError):pass
 MODEL_LOCK=threading.Lock()
 LMS=Path.home()/'.lmstudio'/'bin'/'lms.exe'
 def models():
- with urllib.request.urlopen('http://127.0.0.1:1234/api/v0/models',timeout=10) as r:data=json.load(r)
- return {'selected':MODEL,'models':[{'id':m['id'],'state':m['state'],'quantization':m.get('quantization','')} for m in data['data'] if m.get('type')=='llm']}
+ global MODEL
+ try:
+  with urllib.request.urlopen('http://127.0.0.1:1234/api/v0/models',timeout=2) as r:data=json.load(r)
+  result=[{'id':m['id'],'state':m['state'],'quantization':m.get('quantization','')} for m in data['data'] if m.get('type')=='llm']
+  if not CONFIG.exists():
+   loaded=next((m['id'] for m in result if m['state']=='loaded'),None)
+   if loaded:MODEL=loaded
+  return {'available':True,'selected':MODEL,'models':result}
+ except (OSError,ValueError,KeyError):
+  return {'available':False,'selected':MODEL,'models':[],'message':'No local AI server connected. Reading, dictionary lookup and learning prompts are ready. For AI translation, start LM Studio or paste a learning prompt into your preferred AI chat.'}
 def switch_model(model):
  global MODEL
  if not MODEL_LOCK.acquire(blocking=False):raise ValueError('A sentence is still translating. Wait for it to finish, then try loading again.')
@@ -26,7 +34,20 @@ def switch_model(model):
   return models()
  finally:MODEL_LOCK.release()
 def translate(text):
- with MODEL_LOCK:return translate_selected(text)
+ with MODEL_LOCK:
+  chunks=translation_chunks(text)
+  results=[translate_selected(chunk) for chunk in chunks]
+  return {language:'\n\n'.join(result[language] for result in results) for language in ('en-US','zh-Hant')}
+
+def translation_chunks(text,limit=1200):
+ # Keep all source characters in order; prefer paragraph/sentence boundaries.
+ chunks=[]
+ while len(text)>limit:
+  cut=max(text.rfind(mark,0,limit) for mark in ('\n','。','！','？'))+1
+  if cut<limit//3:cut=limit
+  chunks.append(text[:cut]);text=text[cut:]
+ if text:chunks.append(text)
+ return chunks
 def plain_translation(text,target):
  payload={'model':MODEL,'temperature':0.2,'max_tokens':3000,'stream':False,'messages':[{'role':'user','content':'Translate the following Japanese text into '+target+'. Output only the translation without any additional explanation:\n'+text}]}
  req=urllib.request.Request('http://127.0.0.1:1234/v1/chat/completions',data=json.dumps(payload).encode(),headers={'Content-Type':'application/json'})
@@ -52,10 +73,15 @@ def translate_selected(text):
  return {'en-US':result['english'],'zh-Hant':result['traditional_chinese']}
 class Translator:
  def __init__(self,journal,stop,state,lock):
+  self.journal=journal
   self.queue=Queue(journal);self.pending=deque();self.stop=stop;self.state=state;self.lock=lock;self.current=None
   threading.Thread(target=self.run,daemon=True).start()
  def request(self,rowid):
   rowid=int(rowid)
+  if not self.journal.get(rowid):raise ValueError('Open saved text before translating.')
+  available=models()
+  if not available['available']:raise ValueError(available['message'])
+  if not any(m['id']==MODEL and m['state']=='loaded' for m in available['models']):raise ValueError('Load a local model in Translation setup first, or copy a learning prompt.')
   with self.lock:
    if rowid!=self.current and rowid not in self.pending:self.pending.append(rowid)
  def run(self):
@@ -65,6 +91,7 @@ class Translator:
     if manual is None and not self.state['translation']['enabled']:continue
     job=self.queue.claim(manual)
     if not job:continue
+    self.state['translation']['provider']='LM Studio · '+MODEL+' (local)'
     self.current=job['id'];self.state['translation']['status']=MODEL+' translating #'+str(job['id'])+' · English + 繁體中文'
    try:
     result=translate(job['text'])
