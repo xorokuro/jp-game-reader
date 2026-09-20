@@ -1,0 +1,17 @@
+# Personal journals, game text, purchased dictionaries and credentials stay local.
+data/
+saved_sentences/
+dictionaries/
+__pycache__/
+*.py[cod]
+*.sqlite*
+*.db
+*.mdx
+*.mdd
+*.log
+*.tmp
+.env
+.env.*
+*-key.txt
+local-settings.json
+.venv/

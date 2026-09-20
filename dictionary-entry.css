@@ -1,0 +1,16 @@
+:root{color-scheme:dark}
+html,body{overscroll-behavior:contain;overflow-anchor:none}
+html,body{background:#192229!important;color:#e3eaf0!important}
+body{padding:18px;margin:0;font:18px/1.85 "Yu Gothic",sans-serif;overflow-wrap:anywhere}
+body *{color:inherit!important;background-color:transparent!important;border-color:#526571!important}
+body a,body a *{color:#82d5e6!important}
+body a:hover{text-decoration:underline}
+body .dictionary-source{font:14px sans-serif;color:#b5c7d1!important;border-bottom:1px solid #526571;padding-bottom:12px;margin-bottom:16px}
+audio{color-scheme:dark;display:inline-block;width:185px;height:30px;vertical-align:middle;margin:4px}
+::selection{background:#345b6f!important;color:white!important}
+:is(#dictionary-dark-theme,body.mdict-entry){font:18px/1.85 "Yu Gothic","Microsoft JhengHei",sans-serif!important;letter-spacing:normal!important}
+:is(#dictionary-dark-theme,body.mdict-entry) *{font-family:inherit!important;font-size:inherit!important;letter-spacing:normal!important;color:inherit!important;background-color:transparent!important}
+:is(#dictionary-dark-theme,body.mdict-entry) a,:is(#dictionary-dark-theme,body.mdict-entry) a *{color:#82d5e6!important}
+:is(#dictionary-dark-theme,body.mdict-entry) b,:is(#dictionary-dark-theme,body.mdict-entry) strong{color:#a9dfcc!important}
+:is(#dictionary-dark-theme,body.mdict-entry) ruby rt,:is(#dictionary-dark-theme,body.mdict-entry) sup,:is(#dictionary-dark-theme,body.mdict-entry) sub{font-size:.7em!important}
+:is(#dictionary-dark-theme,body.mdict-entry) .dictionary-source{font-size:14px!important;color:#b5c7d1!important}

@@ -1,0 +1,36 @@
+#dictionary-panel{margin-top:16px;border:1px solid #708690;border-radius:12px;padding:14px;scroll-margin-top:12px}
+.dict-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:10px}.dict-toolbar strong{margin-right:auto}
+.dict-zoom-controls{display:inline-flex;align-items:center;gap:4px}.dict-zoom-controls button{padding:8px 10px}
+#dict-tabs{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0}#dict-tabs button{font-size:13px;max-width:100%;white-space:normal}
+.dict-layout{display:grid;grid-template-columns:minmax(170px,26%) minmax(0,1fr);gap:12px}
+#dict-entries{max-height:620px;overflow:auto}#dict-entries button{display:block;width:100%;text-align:left;margin-bottom:7px;white-space:normal}
+#dict-tabs .active,#dict-entries .active{outline:2px solid #36b4b7;outline-offset:-2px}
+#dict-frame{width:100%;height:620px;border:1px solid #425560;border-radius:8px;background:#192229;color-scheme:dark}
+#dict-preferences{margin:12px 0;padding:10px;border:1px solid #526571;border-radius:8px}
+#dict-preferences summary{cursor:pointer}
+#dict-choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px}
+#dict-choices label{display:flex;align-items:center;gap:9px;font-size:14px;cursor:pointer}
+#dict-choices input{width:18px;height:18px;flex-shrink:0;accent-color:#36b4b7}
+@media(max-width:760px){.dict-layout{grid-template-columns:1fr}#dict-entries{max-height:150px}#dict-frame{height:560px}}
+/* Keep the sentence and definition together across the available screen. */
+body{max-width:none;padding:24px clamp(16px,2vw,40px)}
+/* Result height changes must not move the outer page's reading position. */
+html,body{overflow-anchor:none}
+#dict-entries,#dict-choices{overscroll-behavior:contain}
+#reader-workspace{display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:start;scroll-margin-top:16px}
+#reader-workspace>*{min-width:0}
+#reader-workspace .current,#reader-workspace #dictionary-panel{margin:0}
+#reader-workspace #dictionary-panel[hidden]{display:none}
+#reader-workspace .dict-layout{grid-template-columns:minmax(0,1fr)}
+#reader-workspace #dict-entries{display:flex;flex-wrap:wrap;gap:6px;max-height:140px;overflow:auto}
+#reader-workspace #dict-entries button{width:auto;margin:0}
+#reader-workspace #dict-frame{height:clamp(420px,65vh,900px)}
+@media(min-width:1100px){
+ #reader-workspace:has(#dictionary-panel:not([hidden])){grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+ #reader-workspace .current{position:sticky;top:16px}
+}
+
+#dict-choices{grid-template-columns:1fr}.dict-choice-row{display:flex;align-items:center;gap:6px}.dict-choice-row label{flex:1;min-width:0}.dict-choice-row button{padding:5px 10px}
+
+
+.dict-drag-handle{cursor:grab;touch-action:none;user-select:none;font-size:24px;padding:4px 12px}.dict-dragging{outline:2px solid var(--page-accent,#75ddba);background:var(--button-bg,#203b33);opacity:.85}.dict-dragging .dict-drag-handle{cursor:grabbing}
