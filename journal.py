@@ -382,6 +382,9 @@ def main():
                     return self.send({**state,'workspace':str(Path(args.database).parent.resolve()),'capture_enabled':not args.no_capture,'last':current,'settings':settings,'translation_fields':True,'pending_ocr':pending,'recent':journal.recent(),'exports':{'pending':journal.export_pending.is_set(),'updated_at':journal.exported_at,'error':journal.export_error}})
             query=parse_qs(urlparse(self.path).query)
             try:
+                if p=='/api/translation-options':
+                    import translation_backends
+                    return self.send(translation_backends.catalog())
                 if p=='/api/local-models':
                     import local_translate
                     return self.send(local_translate.models())
@@ -434,11 +437,20 @@ def main():
                         config_path.write_text(json.dumps(settings,indent=2),encoding='utf-8')
                         state['translation']['status']='Enabled' if body['enabled'] else 'Automatic translation paused'
                     return self.send({'ok':True})
+                elif self.path=='/api/translation-engine':
+                    import translation_backends
+                    result=translation_backends.select(body.get('engine'),body.get('model'))
+                    with lock:
+                        state['translation']['provider']=translation_backends.selected().label
+                        state['translation']['status']='Ready: '+translation_backends.selected().label
+                    return self.send(result)
                 elif self.path=='/api/local-model':
                     import local_translate
-                    result=local_translate.switch_model(body.get('model'))
+                    import translation_backends
+                    translation_backends.select('lm-studio',body.get('model'))
+                    result=local_translate.models()
                     with lock:
-                        state['translation']['provider']='LM Studio · '+local_translate.MODEL+' (local)'
+                        state['translation']['provider']=translation_backends.selected().label
                         state['translation']['status']='Model loaded: '+local_translate.MODEL
                     return self.send(result)
                 elif self.path=='/api/local-translate':
@@ -546,7 +558,9 @@ def main():
         config_path.write_text(json.dumps(settings,indent=2),encoding='utf-8')
     state['translation']={'enabled':settings.get('auto_translate',True),'provider':'LM Studio · Qwen3-14B (local)','status':'Local translation is optional. Copy a learning prompt if no model is installed.'}
     import local_translate
-    state['translation']['provider']='LM Studio · '+local_translate.MODEL+' (local)'
+    import translation_backends
+    state['translation']['provider']=translation_backends.selected().label
+    state['translation']['status']='Ready: '+translation_backends.selected().label
     local_translator=local_translate.Translator(journal,stop,state,lock)
     if not args.no_capture:threading.Thread(target=capture,daemon=True).start()
     else:state['status']='Reading mode · Paste Japanese text to read and look up words'

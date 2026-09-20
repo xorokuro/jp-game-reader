@@ -79,9 +79,8 @@ class Translator:
  def request(self,rowid):
   rowid=int(rowid)
   if not self.journal.get(rowid):raise ValueError('Open saved text before translating.')
-  available=models()
-  if not available['available']:raise ValueError(available['message'])
-  if not any(m['id']==MODEL and m['state']=='loaded' for m in available['models']):raise ValueError('Load a local model in Translation setup first, or copy a learning prompt.')
+  import translation_backends
+  translation_backends.ready()
   with self.lock:
    if rowid!=self.current and rowid not in self.pending:self.pending.append(rowid)
  def run(self):
@@ -91,18 +90,20 @@ class Translator:
     if manual is None and not self.state['translation']['enabled']:continue
     job=self.queue.claim(manual)
     if not job:continue
-    self.state['translation']['provider']='LM Studio · '+MODEL+' (local)'
-    self.current=job['id'];self.state['translation']['status']=MODEL+' translating #'+str(job['id'])+' · English + 繁體中文'
+    import translation_backends
+    self.state['translation']['provider']=translation_backends.selected().label
+    self.current=job['id'];self.state['translation']['status']=translation_backends.selected().label+' translating #'+str(job['id'])+' · English + 繁體中文'
    try:
-    result=translate(job['text'])
+    provider,result=translation_backends.translate(job['text'])
     with self.lock:
      saved=self.queue.finish({'token':job['token'],'translations':result})
      if saved:self.state['version']+=1
-     self.state['translation']['status']=MODEL+' translations saved' if saved else 'Sentence changed; stale translation skipped'
-   except Exception:
+     self.state['translation']['provider']=provider
+     self.state['translation']['status']=provider+' translations saved' if saved else 'Sentence changed; stale translation skipped'
+   except Exception as error:
     with self.lock:
      self.queue.finish({'token':job['token'],'error':'local failure'})
      self.state['translation']['enabled']=False
-     self.state['translation']['status']='Local translation paused. Keep the selected model loaded and LM Studio server running on port 1234, then retry.'
+     self.state['translation']['status']='Translation paused: '+str(error)[:350]
    finally:
     with self.lock:self.current=None

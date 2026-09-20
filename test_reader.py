@@ -7,6 +7,7 @@ from unittest.mock import Mock
 import local_translate
 import preferences
 import mdict_library
+import translation_backends
 
 
 class Reader(unittest.TestCase):
@@ -30,10 +31,10 @@ class Reader(unittest.TestCase):
         journal=Mock();journal.get.return_value={'id':1}
         with patch.object(local_translate.threading,'Thread'):
             translator=local_translate.Translator(journal,threading.Event(),{},threading.RLock())
-        with patch.object(local_translate,'models',return_value={'available':True,'models':[{'id':local_translate.MODEL,'state':'loaded'}]}):
+        with patch.object(translation_backends,'selected',return_value=translation_backends.LMStudio()),patch.object(local_translate,'models',return_value={'available':True,'selected':local_translate.MODEL,'models':[{'id':local_translate.MODEL,'state':'loaded'}]}):
             translator.request(1)
         self.assertEqual(list(translator.pending),[1])
-        with patch.object(local_translate,'models',return_value={'available':False,'message':'No local AI'}):
+        with patch.object(translation_backends,'selected',return_value=translation_backends.LMStudio()),patch.object(local_translate,'models',return_value={'available':False,'message':'No local AI','models':[]}):
             with self.assertRaisesRegex(ValueError,'No local AI'):translator.request(1)
 
     def test_preferences_move_with_folder(self):

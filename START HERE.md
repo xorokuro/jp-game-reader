@@ -8,20 +8,26 @@ All 17 dictionary collections from your existing reader are in `dictionaries/`,
 including their supplied recordings and other resources. You do not need the
 original Downloads folders or dictionary viewer applications.
 
-Without LM Studio: use dictionaries, save texts/notes, and copy learning prompts.
-Paste those prompts into any AI chat you use. Internet is needed for online chats,
-not for the included dictionaries. Local AI translation itself requires a local
-model/server; those large model files are not part of this bundle.
+**Offline translation is now included.** In **Translation engine · 翻譯引擎**,
+choose **Argos Translate · offline CPU**, then click **Use selection**. Paste Japanese
+and click **Open + translate locally**. You do not need LM Studio or an LLM for Argos.
+English is translated directly; Traditional Chinese is translated through English.
+Check important wording, especially names and ambiguous sentences.
 
-On this PC, the reader can use your existing LM Studio server automatically when
-it is running. The optional translation section lets you choose a model.
+If you do have LM Studio, choose **LM Studio · local LLM**, select a model and click
+**Use selection**. You can switch back to Argos whenever you want.
+
+Keep the new **translation** subfolder: it contains the full offline Argos engine,
+models and dependencies. An older Drive upload without this folder will not have Argos.
+Re-upload the updated whole folder. Dictionaries and learning prompts still work
+independently of translation; prompts can be pasted into any AI chat you use.
 
 Before copying the folder again, click **Save and close reader** and wait for the
 launcher window to close. Carry the whole folder, including `data/`, so that your
 new texts, translations, notes and preferences come with you. Keep one latest copy;
 there is no automatic sync between laptops.
 
-The folder is about 8.5 GB. Allow at least 10 GB free on USB and the destination.
+The updated folder is larger because it includes Argos. Allow at least 12 GB free on USB and the destination.
 A 16 GB or larger USB drive is suitable. Running from the laptop's internal drive
 is faster than a USB stick. This package includes a Windows x64 runtime.
 

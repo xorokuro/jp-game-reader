@@ -18,7 +18,7 @@ def checksum(path):
         return hashlib.file_digest(stream,'sha256').hexdigest()
 
 
-def build(index, destination, runtime_archive):
+def build(index, destination, runtime_archive, argos_pack=None):
     source=Path(__file__).resolve().parent
     destination=destination.resolve()
     if destination.exists():raise ValueError('Choose a new output folder; existing personal data is never overwritten.')
@@ -45,10 +45,13 @@ def build(index, destination, runtime_archive):
     if checksum(runtime_archive)!=RUNTIME_SHA256:raise ValueError('Python runtime checksum mismatch.')
     destination.mkdir(parents=True)
     for path in source.iterdir():
-        if path.is_file() and path.suffix in ('.py','.js','.css','.html','.ps1','.cmd','.md'):
+        if path.is_file() and path.suffix in ('.py','.js','.css','.html','.ps1','.cmd','.md','.txt'):
             shutil.copy2(path,destination/path.name)
     with zipfile.ZipFile(runtime_archive) as archive:archive.extractall(destination/'runtime')
     (destination/'runtime'/'python313._pth').write_text('python313.zip\n.\n..\n',encoding='utf-8')
+    if argos_pack is not None:
+        if not (argos_pack/'ready.json').is_file():raise ValueError('Argos pack has not passed its offline check.')
+        shutil.copytree(argos_pack,destination/'translation'/'argos')
     copied=[]
     for code,root in roots.items():
         print('Copying '+code+'...',flush=True)
@@ -82,5 +85,6 @@ if __name__=='__main__':
     parser.add_argument('--index',type=Path,required=True)
     parser.add_argument('--destination',type=Path,required=True)
     parser.add_argument('--runtime-archive',type=Path,required=True)
+    parser.add_argument('--argos-pack',type=Path,help='Prepared offline Argos folder to include')
     args=parser.parse_args()
-    build(args.index,args.destination,args.runtime_archive)
+    build(args.index,args.destination,args.runtime_archive,args.argos_pack)

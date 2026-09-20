@@ -12,6 +12,10 @@ repositories only for genuinely different applications built from this foundatio
 
 ## Delivered portable reader
 
+- Selectable Argos Translate and LM Studio providers; engine choice persists per library.
+- Bundled offline CPU translation routes ja→en and en→zt, with Traditional Chinese normalization.
+- Provider registry allows future engines without rebuilding the reading interface.
+
 - Paste-first reading with offline auto dictionary lookup and copyable prompts.
 - Optional local LLM translation with long-block chunking and no-model support.
 - Windows runtime, 17 personal dictionaries, relative paths and integrity manifest.

@@ -19,3 +19,5 @@ runtime/
 portable/
 *.zip
 bundle-manifest.json
+translation/
+*.argosmodel
