@@ -48,7 +48,20 @@ in **Read / select words**. Matches appear underneath; tap one for its definitio
 You can also type a word in **Look up**. Search supports exact matches and prefix
 suggestions, not Japanese conjugation analysis: try the dictionary form if needed.
 
-**Save** keeps a passage in Library, where it can be reopened and annotated.
+**Auto-save passages** defaults to **off**. Pasted text stays temporary until you
+choose **Save**. With the toggle on, tapping **Read** saves the complete passage;
+typing/pasting alone never creates a stream of saved drafts. The toggle is remembered
+after restarting. Turning it off does not delete earlier saved passages.
+
+**Save** always lets you keep a single passage, even with auto-save off. Library shows
+saved passages first, with dates, notes, and a search field. Swipe a saved passage left
+to delete it, or use **Edit**. **Undo delete** restores the most recent deletion during
+the current session. **Delete all saved passages** asks before removing all passages
+and notes. Deleting saved passages does not remove dictionary files.
+
+**Export saved texts** opens the iPhone share sheet for the JSON library, ready to save
+to Files or your preferred storage app. It includes saved passages and notes only.
+
 **Copy learning prompt** copies the passage and selected word for any AI app.
 **Translate** uses Apple's system translation panel; Apple may require language
 downloads. Its translation capability and available languages depend on the phone.

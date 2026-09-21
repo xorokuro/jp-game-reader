@@ -17,6 +17,10 @@ struct SavedText: Identifiable, Codable {
     @Published var dictionaries: [String] = []
     @Published var busy = false
     @Published var saved: [SavedText] = []
+    @Published var autoSave = UserDefaults.standard.bool(forKey: "savePassagesOnRead") {
+        didSet { UserDefaults.standard.set(autoSave, forKey: "savePassagesOnRead") }
+    }
+    @Published private(set) var recentlyDeleted: [SavedText] = []
     @Published var entryHTML = ""
     @Published var entryCode = ""
     @Published var showingEntry = false
@@ -87,16 +91,43 @@ struct SavedText: Identifiable, Codable {
             }
         }
     }
-    func persist() {
-        guard libraryWritable else { status = "The saved library file needs repair before saving new passages. Copy reading-library.json from Files for safekeeping."; return }
-        do { try JSONEncoder().encode(saved).write(to: libraryURL, options: .atomic) }
-        catch { status = "Could not save: \(error.localizedDescription)" }
+    @discardableResult private func store(_ passages: [SavedText]) -> Bool {
+        guard libraryWritable else { status = "The saved library file needs repair before saving new passages. Copy reading-library.json from Files for safekeeping."; return false }
+        do {
+            try JSONEncoder().encode(passages).write(to: libraryURL, options: .atomic)
+            saved = passages
+            return true
+        } catch { status = "Could not update your library: \(error.localizedDescription)"; return false }
     }
     func save() {
-        guard libraryWritable else { persist(); return }
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard !saved.contains(where: { $0.text == text }) else { status = "Already in your library."; return }
-        saved.insert(SavedText(text: text), at: 0); persist(); status = "Saved to your library."
+        if store([SavedText(text: text)] + saved) { status = "Saved to your library." }
+    }
+    func readPassage() {
+        if autoSave { save() }
+        else { status = "Auto-save is off. Tap Save if you want to keep this passage." }
+    }
+    func updateNote(id: UUID, note: String) {
+        var next = saved
+        guard let index = next.firstIndex(where: { $0.id == id }) else { return }
+        next[index].note = note
+        store(next)
+    }
+    func delete(ids: Set<UUID>) {
+        let removed = saved.filter { ids.contains($0.id) }
+        guard !removed.isEmpty else { return }
+        if store(saved.filter { !ids.contains($0.id) }) {
+            recentlyDeleted = removed
+            status = "Deleted \(removed.count) saved passage(s). Undo is available below."
+        }
+    }
+    func undoDelete() {
+        let existing = Set(saved.map(\.id))
+        let restored = recentlyDeleted.filter { !existing.contains($0.id) }
+        if store((saved + restored).sorted { $0.date > $1.date }) {
+            recentlyDeleted = []; status = "Deleted passages restored."
+        }
     }
     func prompt() -> String {
         "Help me study this Japanese passage. Translate into natural English and Traditional Chinese, explain grammar and vocabulary, give readings, and preserve the original Japanese. Do not invent missing context.\n\n\(text)" + (word.isEmpty ? "" : "\n\nFocus on this selected word in context: \(word)")
@@ -144,11 +175,19 @@ struct ReaderHome: View {
     @State private var translation = false
     @State private var selectedTab = 0
     @State private var editing = true
+    @State private var librarySearch = ""
+    @State private var deleteAll = false
+    private var filteredPassages: [SavedText] {
+        guard !librarySearch.isEmpty else { return model.saved }
+        return model.saved.filter { $0.text.localizedCaseInsensitiveContains(librarySearch) || $0.note.localizedCaseInsensitiveContains(librarySearch) }
+    }
     var body: some View {
         TabView(selection: $selectedTab) {
             NavigationStack {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Paste a passage. Select a word to look it up.").font(.subheadline).foregroundStyle(.secondary)
+                    Toggle("Auto-save passages", isOn: $model.autoSave).accessibilityIdentifier("autoSavePassages")
+                    Text(model.autoSave ? "Saved when you tap Read. Your choice is remembered." : "Off: pasted text stays temporary unless you tap Save.").font(.caption).foregroundStyle(.secondary)
                     Picker("Reading mode", selection: $editing) {
                         Text("Paste / edit").tag(true); Text("Read / select words").tag(false)
                     }.pickerStyle(.segmented)
@@ -160,7 +199,7 @@ struct ReaderHome: View {
                         }
                     }
                     HStack {
-                        Button("Read") { editing = false; UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }.buttonStyle(.borderedProminent).accessibilityIdentifier("openPassage")
+                        Button("Read") { model.readPassage(); editing = false; UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }.buttonStyle(.borderedProminent).accessibilityIdentifier("openPassage")
                         Button("Save") { model.save() }.buttonStyle(.bordered)
                         Button("Translate") { translation = true }.buttonStyle(.bordered).disabled(model.text.isEmpty)
                             .translationPresentation(isPresented: $translation, text: model.text)
@@ -176,19 +215,33 @@ struct ReaderHome: View {
             }.tabItem { Label("Look up", systemImage: "magnifyingglass") }.tag(1)
             NavigationStack {
                 List {
+                    Section("Saved passages · \(model.saved.count)") {
+                        if model.saved.isEmpty {
+                            Text("No saved passages. Use Save, or turn on Auto-save and tap Read.").foregroundStyle(.secondary).accessibilityIdentifier("emptyLibrary")
+                        } else if filteredPassages.isEmpty {
+                            Text("No passages match your search.").foregroundStyle(.secondary)
+                        }
+                        ForEach(filteredPassages) { item in
+                            VStack(alignment: .leading, spacing: 6) {
+                                Button { model.text = item.text; selectedTab = 0; editing = false } label: { Text(item.text).lineLimit(3).foregroundStyle(.primary) }
+                                Text(item.date, style: .date).font(.caption).foregroundStyle(.secondary)
+                                TextField("Study note", text: Binding(get: { model.saved.first(where: { $0.id == item.id })?.note ?? "" }, set: { model.updateNote(id: item.id, note: $0) }), axis: .vertical)
+                            }
+                        }.onDelete { offsets in
+                            let ids = Set(offsets.map { filteredPassages[$0].id })
+                            model.delete(ids: ids)
+                        }
+                        if !model.recentlyDeleted.isEmpty { Button("Undo delete") { model.undoDelete() } }
+                        if !model.saved.isEmpty {
+                            ShareLink(item: model.libraryURL) { Label("Export saved texts", systemImage: "square.and.arrow.up") }
+                            Button("Delete all saved passages", role: .destructive) { deleteAll = true }
+                        }
+                    }
                     Section("Offline dictionaries · \(model.dictionaries.count)") {
                         Text("Move the supplied dictionaries folder into On My iPhone → Japanese Reader using Files, then tap Refresh. Or import the folder below.").font(.subheadline)
                         Button("Import dictionaries folder") { importing = true }.disabled(model.busy)
                         Button("Refresh dictionaries") { model.reload() }
                         ForEach(model.dictionaries, id: \.self) { Text($0).font(.footnote) }
-                    }
-                    Section("Saved passages") {
-                        ForEach($model.saved) { $item in
-                            VStack(alignment: .leading) {
-                                Button { model.text = item.text; selectedTab = 0; editing = false } label: { Text(item.text).lineLimit(3).foregroundStyle(.primary) }
-                                TextField("Study note", text: $item.note, axis: .vertical).onChange(of: item.note) { model.persist() }
-                            }
-                        }
                     }
                     Section("Keep a backup") {
                         Text("Your passages and notes are in reading-library.json in Files → On My iPhone → Japanese Reader. Copy this file before uninstalling. Dictionary files can also be copied from here.").font(.footnote)
@@ -199,6 +252,12 @@ struct ReaderHome: View {
                     if model.busy { ProgressView("Working…") }
                     if !model.status.isEmpty { Text(model.status).font(.footnote) }
                 }.navigationTitle("Library & setup")
+                    .searchable(text: $librarySearch, prompt: "Find saved text or notes")
+                    .toolbar { EditButton() }
+                    .confirmationDialog("Delete all \(model.saved.count) saved passages and their notes?", isPresented: $deleteAll, titleVisibility: .visible) {
+                        Button("Delete all", role: .destructive) { model.delete(ids: Set(model.saved.map(\.id))) }
+                        Button("Cancel", role: .cancel) {}
+                    }
             }.tabItem { Label("Library", systemImage: "books.vertical") }.tag(2)
         }
         .onChange(of: selectedTab) { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
