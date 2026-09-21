@@ -53,6 +53,7 @@ struct SavedText: Identifiable, Codable {
         }
     }
     func search() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         searchGeneration += 1
         let generation = searchGeneration, query = word, root = dictionaryRoot
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { hits = []; return }
@@ -219,7 +220,7 @@ struct ReaderHome: View {
     private var lookup: some View {
         VStack {
             HStack {
-                TextField("Search Japanese…", text: $model.word).textInputAutocapitalization(.never).autocorrectionDisabled().onSubmit { model.search() }
+                TextField("Search Japanese…", text: $model.word).textInputAutocapitalization(.never).autocorrectionDisabled().submitLabel(.search).onSubmit { model.search() }
                 Button { model.search() } label: { Image(systemName: "magnifyingglass") }.accessibilityLabel("Search dictionaries")
                 if model.busy { ProgressView() }
             }.padding(10).background(.quaternary, in: RoundedRectangle(cornerRadius: 10))

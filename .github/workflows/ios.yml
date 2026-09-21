@@ -17,6 +17,11 @@ jobs:
         run: python3 ios/test_core.py
       - name: Build unsigned device app
         run: bash ios/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: JapaneseReader-iPhone
+          path: ios/build/JapaneseReader.ipa
+          retention-days: 14
       - name: Test iPhone interface
         run: |
           DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for devices in d["devices"].values() for x in devices if "iPhone" in x["name"]))')
@@ -25,15 +30,8 @@ jobs:
         if: always()
         run: xcrun xcresulttool export attachments --path ios/build/UIResults.xcresult --output-path ios/build/screenshots
       - uses: actions/upload-artifact@v4
-        with:
-          name: JapaneseReader-iPhone
-          path: ios/build/JapaneseReader.ipa
-          retention-days: 14
-      - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: iPhone-test-results
-          path: |
-            ios/build/UIResults.xcresult
-            ios/build/screenshots
+          path: ios/build/screenshots
           retention-days: 7

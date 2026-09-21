@@ -23,7 +23,8 @@ final class ReaderUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Japanese reading test"].waitForExistence(timeout: 15))
         app.tabBars.buttons["Look up"].tap()
         let search = app.textFields["Search Japanese…"]
-        search.tap(); search.typeText("test\n")
+        search.tap(); search.typeText("test")
+        app.buttons["Search dictionaries"].tap()
         XCTAssertTrue(app.staticTexts["Add the dictionaries folder in Library first."].waitForExistence(timeout: 10))
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.lifetime = .keepAlways
