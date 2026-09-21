@@ -1,0 +1,22 @@
+name: Build iPhone app
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build unsigned device app
+        run: bash ios/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: JapaneseReader-iPhone
+          path: ios/build/JapaneseReader.ipa
+          retention-days: 14

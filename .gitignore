@@ -21,3 +21,6 @@ portable/
 bundle-manifest.json
 translation/
 *.argosmodel
+ios/build/
+ios/*.xcodeproj/
+*.ipa
