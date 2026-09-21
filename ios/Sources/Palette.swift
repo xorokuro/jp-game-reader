@@ -29,7 +29,7 @@ enum Palette {
         let background = dark ? luminance(channels(0x2C2C2E)) : 1
         for _ in 0..<100 {
             let l = luminance(c)
-            if (max(l, background) + 0.05) / (min(l, background) + 0.05) >= 4.5 { break }
+            if (max(l, background) + 0.05) / (min(l, background) + 0.05) >= 4.8 { break }
             c = c.map { dark ? $0 + (1 - $0) * 0.08 : $0 * 0.92 }
         }
         return Color(.sRGB, red: c[0], green: c[1], blue: c[2], opacity: 1)

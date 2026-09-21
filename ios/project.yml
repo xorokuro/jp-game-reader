@@ -39,10 +39,19 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: JapaneseReader
+  ReaderUnitTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [UnitTests]
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: JapaneseReader
 schemes:
   JapaneseReader:
     build:
       targets:
         JapaneseReader: all
     test:
-      targets: [ReaderUITests]
+      targets: [ReaderUnitTests, ReaderUITests]
