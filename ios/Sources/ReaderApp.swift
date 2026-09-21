@@ -21,6 +21,7 @@ struct SavedText: Identifiable, Codable {
     @Published var entryCode = ""
     @Published var showingEntry = false
     private var searchGeneration = 0
+    private var libraryWritable = true
     let queue = DispatchQueue(label: "JapaneseReader.dictionary", qos: .userInitiated)
     let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     var dictionaryRoot: URL { documents.appendingPathComponent("dictionaries", isDirectory: true) }
@@ -28,7 +29,7 @@ struct SavedText: Identifiable, Codable {
     init() {
         if let bytes = try? Data(contentsOf: libraryURL) {
             do { saved = try JSONDecoder().decode([SavedText].self, from: bytes) }
-            catch { status = "The saved library could not be read. Its file has been preserved." }
+            catch { libraryWritable = false; status = "The saved library could not be read. Its file has been preserved." }
         }
         reload()
     }
@@ -79,10 +80,12 @@ struct SavedText: Identifiable, Codable {
         }
     }
     func persist() {
+        guard libraryWritable else { status = "The saved library file needs repair before saving new passages. Copy reading-library.json from Files for safekeeping."; return }
         do { try JSONEncoder().encode(saved).write(to: libraryURL, options: .atomic) }
         catch { status = "Could not save: \(error.localizedDescription)" }
     }
     func save() {
+        guard libraryWritable else { persist(); return }
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard !saved.contains(where: { $0.text == text }) else { status = "Already in your library."; return }
         saved.insert(SavedText(text: text), at: 0); persist(); status = "Saved to your library."
@@ -105,7 +108,9 @@ struct SavedText: Identifiable, Codable {
                 guard !fm.fileExists(atPath: destination.path) else { throw ReaderError("A dictionaries folder already exists. Use Files to move it out before replacing it; your existing dictionaries have been kept.") }
                 let store = try DictionaryStore(root: source)
                 guard !(try store.catalog()).isEmpty else { throw ReaderError("This folder contains no indexed dictionaries.") }
+                try store.validateFiles()
                 try fm.copyItem(at: source, to: staging)
+                try DictionaryStore(root: staging).validateFiles()
                 try fm.moveItem(at: staging, to: destination)
             }
             try? fm.removeItem(at: staging)
@@ -122,7 +127,7 @@ struct SavedText: Identifiable, Codable {
 
 @main struct JapaneseReaderApp: App {
     @StateObject private var model = ReaderModel()
-    var body: some Scene { WindowGroup { ReaderHome().environmentObject(model) } }
+    var body: some Scene { WindowGroup { ReaderHome().environmentObject(model).tint(Color(red: 0.12, green: 0.48, blue: 0.45)) } }
 }
 
 struct ReaderHome: View {

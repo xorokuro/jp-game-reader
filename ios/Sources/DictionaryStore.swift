@@ -55,6 +55,13 @@ final class DictionaryStore {
             .folding(options: [.caseInsensitive], locale: Locale(identifier: "en_US_POSIX"))
     }
     func catalog() throws -> [[String: String]] { try query("SELECT * FROM dictionaries ORDER BY rowid") }
+    func validateFiles() throws {
+        for file in try query("SELECT path,size FROM files") {
+            let url = try path(file["path"]!)
+            let size = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber
+            guard size?.int64Value == Int64(file["size"]!) else { throw ReaderError("Dictionary file is incomplete: \(url.lastPathComponent)") }
+        }
+    }
     func media(code: String, name: String) throws -> Data {
         let clean = name.replacingOccurrences(of: "\\", with: "/").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard !clean.contains(":"), !clean.split(separator: "/").contains(".."), clean.count < 601 else { throw ReaderError("Invalid media path.") }

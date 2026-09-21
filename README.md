@@ -5,6 +5,13 @@ messages or game dialogue; select words for automatic dictionary search; save
 notes; copy learning prompts; optionally translate with a local LLM.
 OBS is an optional input, not a requirement.
 
+## iPhone / iPad edition
+
+The native iOS companion supports pasted text, offline MDX/MDD dictionaries,
+saved passages and notes, learning prompts, and Apple's translation panel.
+See [iPhone installation and build guide](ios/README.md). It uses the same personal
+dictionary files, imported once. The Windows Argos runtime is not bundled in iOS.
+
 ## Portable Windows edition — start here
 
 1. Copy the entire **Japanese Reader Portable** folder to your Windows laptop.

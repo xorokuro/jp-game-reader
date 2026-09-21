@@ -6,6 +6,10 @@ final class ReaderUITests: XCTestCase {
         app.launch()
         let editor = app.textViews.firstMatch
         XCTAssertTrue(editor.waitForExistence(timeout: 10))
+        let readerScreenshot = XCTAttachment(screenshot: app.screenshot())
+        readerScreenshot.name = "Reader screen"
+        readerScreenshot.lifetime = .keepAlways
+        add(readerScreenshot)
         editor.tap()
         editor.typeText("Japanese reading test")
         app.buttons["Read"].firstMatch.tap()
