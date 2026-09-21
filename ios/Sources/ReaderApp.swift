@@ -27,6 +27,13 @@ struct SavedText: Identifiable, Codable {
     var dictionaryRoot: URL { documents.appendingPathComponent("dictionaries", isDirectory: true) }
     var libraryURL: URL { documents.appendingPathComponent("reading-library.json") }
     init() {
+        do {
+            try FileManager.default.createDirectory(at: documents, withIntermediateDirectories: true)
+            let help = documents.appendingPathComponent("ABOUT THIS FOLDER.txt")
+            if !FileManager.default.fileExists(atPath: help.path) {
+                try "Japanese Reader\n\nMove the supplied dictionaries folder here, keeping mdict-index.sqlite3 and sources inside it. Then open Library and tap Refresh dictionaries.\n\nSaved passages and notes are in reading-library.json. Copy that file for backup before uninstalling the app.\n".write(to: help, atomically: true, encoding: .utf8)
+            }
+        } catch { status = "Could not prepare the Files folder: \(error.localizedDescription)" }
         if let bytes = try? Data(contentsOf: libraryURL) {
             do { saved = try JSONDecoder().decode([SavedText].self, from: bytes) }
             catch { libraryWritable = false; status = "The saved library could not be read. Its file has been preserved." }
