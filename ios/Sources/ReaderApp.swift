@@ -9,12 +9,22 @@ struct SavedText: Identifiable, Codable {
     var date = Date()
 }
 
+struct InstalledDictionary: Identifiable {
+    let id: String
+    let code: String
+    let name: String
+    let root: URL
+}
+
 @MainActor final class ReaderModel: ObservableObject {
     @Published var text = ""
     @Published var word = ""
     @Published var hits: [DictionaryHit] = []
     @Published var status = ""
-    @Published var dictionaries: [String] = []
+    @Published var dictionaries: [InstalledDictionary] = []
+    @Published var disabledDictionaries = Set(UserDefaults.standard.stringArray(forKey: "disabledDictionaries") ?? [])
+    var dictionaryOrder = UserDefaults.standard.stringArray(forKey: "dictionaryOrder") ?? []
+    @Published var entryRoot: URL?
     @Published var busy = false
     @Published var saved: [SavedText] = []
     @Published var autoSave = UserDefaults.standard.bool(forKey: "savePassagesOnRead") {
@@ -46,24 +56,46 @@ struct SavedText: Identifiable, Codable {
     }
     func reload() {
         let root = dictionaryRoot
+        let extras = documents.appendingPathComponent("Dictionary Packs", isDirectory: true)
         queue.async {
-            let result = Result { try DictionaryStore(root: root).catalog().compactMap { $0["name"] } }
-            DispatchQueue.main.async {
-                switch result {
-                case .success(let names): self.dictionaries = names
-                case .failure: self.dictionaries = []
+            let roots = [root] + ((try? FileManager.default.contentsOfDirectory(at: extras, includingPropertiesForKeys: nil)) ?? []).sorted { $0.path < $1.path }
+            let items = roots.flatMap { folder -> [InstalledDictionary] in
+                guard let catalog = try? DictionaryStore(root: folder).catalog() else { return [] }
+                return catalog.compactMap { row in
+                    guard let code = row["code"], let name = row["name"] else { return nil }
+                    let id = (folder == root ? "base" : folder.lastPathComponent) + ":" + code
+                    return InstalledDictionary(id: id, code: code, name: name, root: folder)
                 }
             }
+            DispatchQueue.main.async {
+                let order = self.dictionaryOrder
+                self.dictionaries = items.sorted { (order.firstIndex(of: $0.id) ?? Int.max) < (order.firstIndex(of: $1.id) ?? Int.max) }
+            }
         }
+    }
+    func enableDictionary(_ id: String, enabled: Bool) {
+        if enabled { disabledDictionaries.remove(id) } else { disabledDictionaries.insert(id) }
+        UserDefaults.standard.set(Array(disabledDictionaries), forKey: "disabledDictionaries")
+        searchGeneration += 1; hits = []; busy = false
+    }
+    func moveDictionaries(from: IndexSet, to: Int) {
+        dictionaries.move(fromOffsets: from, toOffset: to)
+        dictionaryOrder = dictionaries.map(\.id)
+        UserDefaults.standard.set(dictionaryOrder, forKey: "dictionaryOrder")
+        searchGeneration += 1; hits = []; busy = false
     }
     func search() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         searchGeneration += 1
-        let generation = searchGeneration, query = word, root = dictionaryRoot
+        let generation = searchGeneration, query = word
+        let selected = dictionaries.filter { !disabledDictionaries.contains($0.id) }
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { hits = []; return }
         busy = true
         queue.async {
-            let result = Result { try DictionaryStore(root: root).search(query) }
+            let result = Result { () -> [DictionaryHit] in
+                guard !selected.isEmpty else { throw ReaderError("Enable a dictionary in Library first, or add the dictionaries folder.") }
+                return try selected.flatMap { try DictionaryStore(root: $0.root).search(query, codes: [$0.code]) }
+            }
             DispatchQueue.main.async {
                 guard generation == self.searchGeneration else { return }
                 self.busy = false
@@ -75,7 +107,7 @@ struct SavedText: Identifiable, Codable {
         }
     }
     func open(_ hit: DictionaryHit) {
-        let root = dictionaryRoot
+        let root = hit.root
         busy = true
         queue.async {
             let result = Result { () -> String in
@@ -85,7 +117,7 @@ struct SavedText: Identifiable, Codable {
             DispatchQueue.main.async {
                 self.busy = false
                 switch result {
-                case .success(let html): self.entryHTML = html; self.entryCode = hit.code; self.showingEntry = true
+                case .success(let html): self.entryHTML = html; self.entryCode = hit.code; self.entryRoot = root; self.showingEntry = true
                 case .failure(let error): self.status = error.localizedDescription
                 }
             }
@@ -136,12 +168,14 @@ struct SavedText: Identifiable, Codable {
         guard !busy else { return }
         busy = true; status = "Copying dictionaries. Keep this app open until it finishes."
         UIApplication.shared.isIdleTimerDisabled = true
-        let destination = dictionaryRoot
+        let destination = FileManager.default.fileExists(atPath: dictionaryRoot.path)
+            ? documents.appendingPathComponent("Dictionary Packs", isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
+            : dictionaryRoot
         queue.async {
             let scoped = source.startAccessingSecurityScopedResource()
             defer { if scoped { source.stopAccessingSecurityScopedResource() } }
             let fm = FileManager.default
-            let staging = destination.deletingLastPathComponent().appendingPathComponent("dictionary-import-" + UUID().uuidString)
+            let staging = self.documents.appendingPathComponent("dictionary-import-" + UUID().uuidString)
             let result = Result { () -> Void in
                 guard source.standardizedFileURL != destination.standardizedFileURL else { return }
                 guard !fm.fileExists(atPath: destination.path) else { throw ReaderError("A dictionaries folder already exists. Use Files to move it out before replacing it; your existing dictionaries have been kept.") }
@@ -150,6 +184,7 @@ struct SavedText: Identifiable, Codable {
                 try store.validateFiles()
                 try fm.copyItem(at: source, to: staging)
                 try DictionaryStore(root: staging).validateFiles()
+                try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try fm.moveItem(at: staging, to: destination)
             }
             try? fm.removeItem(at: staging)
@@ -279,9 +314,16 @@ struct ReaderHome: View {
                     }
                     Section("Offline dictionaries · \(model.dictionaries.count)") {
                         Text("Move the supplied dictionaries folder into On My iPhone → Japanese Reader using Files, then tap Refresh. Or import the folder below.").font(.subheadline)
-                        Button("Import dictionaries folder") { importing = true }.disabled(model.busy)
+                        Button("Add dictionary pack") { importing = true }.disabled(model.busy)
                         Button("Refresh dictionaries") { model.reload() }
-                        ForEach(model.dictionaries, id: \.self) { Text($0).font(.footnote) }
+                        Text("Switch dictionaries on or off. Tap Edit, then drag the handles to set lookup order. Add another prepared pack without downloading your existing dictionaries again.").font(.caption)
+                        HStack {
+                            Button("Enable all") { for item in model.dictionaries { model.enableDictionary(item.id, enabled: true) } }
+                            Button("Disable all") { for item in model.dictionaries { model.enableDictionary(item.id, enabled: false) } }
+                        }
+                        ForEach(model.dictionaries) { item in
+                            Toggle(item.name, isOn: Binding(get: { !model.disabledDictionaries.contains(item.id) }, set: { model.enableDictionary(item.id, enabled: $0) })).font(.footnote)
+                        }.onMove { model.moveDictionaries(from: $0, to: $1) }
                     }
                     Section("Colors & contrast") {
                         ColorPicker("Accent color", selection: colorBinding($accentRGB), supportsOpacity: false).accessibilityIdentifier("accentColor")
@@ -320,7 +362,7 @@ struct ReaderHome: View {
         }
         .sheet(isPresented: $model.showingEntry) {
             NavigationStack {
-                DictionaryPage(html: model.entryHTML, root: model.dictionaryRoot, code: model.entryCode) { word in
+                DictionaryPage(html: model.entryHTML, root: model.entryRoot ?? model.dictionaryRoot, code: model.entryCode) { word in
                     model.showingEntry = false; model.word = word; model.search()
                 }.navigationTitle("Dictionary entry").navigationBarTitleDisplayMode(.inline)
                     .toolbar { Button("Done") { model.showingEntry = false } }
@@ -334,7 +376,7 @@ struct ReaderHome: View {
                 Button { model.search() } label: { Image(systemName: "magnifyingglass") }.accessibilityLabel("Search dictionaries")
                 if model.busy { ProgressView() }
             }.padding(10).background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
-            List(model.hits) { hit in
+            List(model.hits, id: \.identity) { hit in
                 Button { model.open(hit) } label: {
                     VStack(alignment: .leading) { Text(hit.word).font(.headline); Text(hit.dictionary).font(.caption).foregroundStyle(.secondary) }
                 }

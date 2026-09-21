@@ -9,6 +9,8 @@ struct ReaderError: LocalizedError {
 }
 struct DictionaryHit: Identifiable {
     let id: Int64
+    let root: URL
+    var identity: String { root.path + "/" + code + "/" + String(id) }
     let code: String
     let dictionary: String
     let word: String
@@ -76,16 +78,18 @@ final class DictionaryStore {
         guard let dictionary = try catalog().first(where: { $0["code"] == code }), let folder = dictionary["root"], let css = dictionary["css"], !css.isEmpty else { return "" }
         return (try? String(contentsOf: path(folder + "/" + css), encoding: .utf8)) ?? ""
     }
-    func search(_ word: String) throws -> [DictionaryHit] {
+    func search(_ word: String, codes: [String]? = nil) throws -> [DictionaryHit] {
         let key = Self.normalize(word)
         guard !key.isEmpty else { return [] }
         var hits: [DictionaryHit] = []
-        for dictionary in try catalog() {
+        let available = try catalog()
+        let ordered = codes.map { order in order.compactMap { code in available.first { $0["code"] == code } } } ?? available
+        for dictionary in ordered {
             let code = dictionary["code"]!
             guard let file = try query("SELECT id FROM files WHERE code=? AND kind='.mdx'", [code]).first?["id"] else { continue }
             let rows = try query("SELECT id,word FROM records WHERE file=? AND norm=? LIMIT 30", [file, key])
             let prefix = rows.isEmpty ? try query("SELECT id,word FROM records WHERE file=? AND norm>? AND norm<? ORDER BY norm,id LIMIT 12", [file, key, key + "\u{10ffff}"]) : []
-            hits += (rows + prefix).map { DictionaryHit(id: Int64($0["id"]!)!, code: code, dictionary: dictionary["name"]!, word: $0["word"]!) }
+            hits += (rows + prefix).map { DictionaryHit(id: Int64($0["id"]!)!, root: root, code: code, dictionary: dictionary["name"]!, word: $0["word"]!) }
         }
         return hits
     }

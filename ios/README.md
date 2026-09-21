@@ -97,3 +97,8 @@ media playback still require testing on the user's iPhone.
 ## Version 1.2
 
 A system Paste button inserts clipboard text without opening the keyboard. The reading screen scrolls, keeps a 220-point editor, and uses a compact title. Read and Done are available above the keyboard. Install the updated IPA over the existing app with the same Apple account to preserve dictionaries and saved passages.
+
+### Colors and dictionary choices
+Library → Colors & contrast offers any accent color and an optional custom reading background. Reading text chooses black/white for contrast; accent links adjust for system light/dark surfaces. Dictionary entry HTML retains its own styles.
+
+Library offers per-dictionary toggles and Edit → drag handles for lookup order. Preferences persist. Add dictionary pack imports another indexed folder alongside existing dictionaries, without replacing or redownloading them. Packs contain mdict-index.sqlite3 plus their referenced source files; raw MDX/MDD alone are not yet indexed on the phone. Use export_dictionary_pack.py to export a single dictionary from a portable indexed collection. Extract its ZIP in Files, then select dictionary-pack using Add dictionary pack.
