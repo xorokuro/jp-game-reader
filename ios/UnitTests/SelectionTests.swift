@@ -3,6 +3,16 @@ import WebKit
 @testable import JapaneseReader
 
 @MainActor final class SelectionTests: XCTestCase {
+    private func evaluate(_ script: String, in view: WKWebView) async throws -> Any? {
+        // Use the Objective-C completion API: the runner's iOS runtime does not
+        // include the newer libswiftWebKit async overlay. Both worlds share DOM.
+        try await withCheckedThrowingContinuation { continuation in
+            view.evaluateJavaScript(script) { value, error in
+                if let error { continuation.resume(throwing: error) }
+                else { continuation.resume(returning: value) }
+            }
+        }
+    }
     private func host(_ view: UIView) -> UIWindow {
         let window: UIWindow
         if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
@@ -71,20 +81,20 @@ import WebKit
         }
         XCTAssertFalse(view.configuration.defaultWebpagePreferences.allowsContentJavaScript)
         let select = "const r=document.createRange(); const n=document.getElementById('passage').firstChild; r.setStart(n,0); r.setEnd(n,END); const s=window.getSelection(); s.removeAllRanges(); s.addRange(r);"
-        _ = try await view.evaluateJavaScript("(() => {" + select.replacingOccurrences(of: "END", with: "2") + "return true;})()", in: nil, in: DictionaryPage.selectionWorld)
+        _ = try await evaluate("(() => {" + select.replacingOccurrences(of: "END", with: "2") + "return true;})()", in: view)
         await fulfillment(of: [first], timeout: 5)
         try await Task.sleep(nanoseconds: 300_000_000)
-        var selected = try await view.evaluateJavaScript("window.getSelection().toString()", in: nil, in: DictionaryPage.selectionWorld)
+        var selected = try await evaluate("window.getSelection().toString()", in: view)
         XCTAssertEqual(selected as? String, "日本")
         XCTAssertEqual(model.word, "日本")
         XCTAssertTrue(model.showingEntry)
-        _ = try await view.evaluateJavaScript("(() => {" + select.replacingOccurrences(of: "END", with: "3") + "return true;})()", in: nil, in: DictionaryPage.selectionWorld)
+        _ = try await evaluate("(() => {" + select.replacingOccurrences(of: "END", with: "3") + "return true;})()", in: view)
         await fulfillment(of: [second], timeout: 5)
-        selected = try await view.evaluateJavaScript("window.getSelection().toString()", in: nil, in: DictionaryPage.selectionWorld)
+        selected = try await evaluate("window.getSelection().toString()", in: view)
         XCTAssertEqual(selected as? String, "日本語")
         XCTAssertEqual(model.word, "日本語")
         XCTAssertTrue(model.showingEntry)
-        let unsafe = try await view.evaluateJavaScript("document.getElementById('unsafe').click(); document.body.dataset.unsafe || 'blocked'", in: nil, in: DictionaryPage.selectionWorld)
+        let unsafe = try await evaluate("document.getElementById('unsafe').click(); document.body.dataset.unsafe || 'blocked'", in: view)
         XCTAssertEqual(unsafe as? String, "blocked")
     }
 }
