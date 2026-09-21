@@ -177,6 +177,12 @@ struct ReaderHome: View {
     @State private var editing = true
     @State private var librarySearch = ""
     @State private var deleteAll = false
+    @FocusState private var passageFocused: Bool
+    private func read() {
+        passageFocused = false
+        model.readPassage(); editing = false
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
     private var filteredPassages: [SavedText] {
         guard !librarySearch.isEmpty else { return model.saved }
         return model.saved.filter { $0.text.localizedCaseInsensitiveContains(librarySearch) || $0.note.localizedCaseInsensitiveContains(librarySearch) }
@@ -184,7 +190,19 @@ struct ReaderHome: View {
     var body: some View {
         TabView(selection: $selectedTab) {
             NavigationStack {
+                ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        PasteButton(payloadType: String.self) { strings in
+                            guard !strings.isEmpty else { return }
+                            model.text = strings.joined(separator: "\n")
+                            model.status = ""
+                            editing = true
+                            passageFocused = false
+                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        }.buttonStyle(.borderedProminent).accessibilityIdentifier("pastePassage")
+                        Text("Paste Japanese from another app").font(.caption).foregroundStyle(.secondary)
+                    }
                     Text("Paste a passage. Select a word to look it up.").font(.subheadline).foregroundStyle(.secondary)
                     Toggle("Auto-save passages", isOn: $model.autoSave).accessibilityIdentifier("autoSavePassages")
                     Text(model.autoSave ? "Saved when you tap Read. Your choice is remembered." : "Off: pasted text stays temporary unless you tap Save.").font(.caption).foregroundStyle(.secondary)
@@ -192,22 +210,34 @@ struct ReaderHome: View {
                         Text("Paste / edit").tag(true); Text("Read / select words").tag(false)
                     }.pickerStyle(.segmented)
                     if editing {
-                        TextEditor(text: $model.text).font(.system(size: 21)).accessibilityIdentifier("passageEditor").overlay(RoundedRectangle(cornerRadius: 12).stroke(.secondary.opacity(0.3)))
+                        TextEditor(text: $model.text).font(.system(size: 21)).focused($passageFocused).frame(height: 220).accessibilityIdentifier("passageEditor").overlay(RoundedRectangle(cornerRadius: 12).stroke(.secondary.opacity(0.3)))
                     } else {
                         SelectableJapanese(text: model.text) { word in
                             model.word = word; model.search()
-                        }
+                        }.frame(height: 280)
                     }
                     HStack {
-                        Button("Read") { model.readPassage(); editing = false; UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }.buttonStyle(.borderedProminent).accessibilityIdentifier("openPassage")
+                        if !passageFocused { Button("Read") { read() }.buttonStyle(.borderedProminent).accessibilityIdentifier("openPassage") }
                         Button("Save") { model.save() }.buttonStyle(.bordered)
                         Button("Translate") { translation = true }.buttonStyle(.bordered).disabled(model.text.isEmpty)
                             .translationPresentation(isPresented: $translation, text: model.text)
                     }
                     Button { UIPasteboard.general.string = model.prompt(); model.status = "Learning prompt copied. Paste it into your preferred AI app." } label: { Label("Copy learning prompt", systemImage: "doc.on.doc") }
-                    lookup.frame(maxHeight: 240)
+                    lookup.frame(height: model.hits.isEmpty ? 56 : 240)
                     if !model.status.isEmpty { Text(model.status).font(.footnote).foregroundStyle(.secondary) }
-                }.padding().navigationTitle("Japanese Reader")
+                }.padding()
+                }.scrollDismissesKeyboard(.interactively)
+                .navigationTitle("Japanese Reader").navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        if passageFocused { Button("Read") { read() }.accessibilityIdentifier("openPassage") }
+                        Spacer()
+                        Button("Done") {
+                            passageFocused = false
+                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        }.accessibilityIdentifier("dismissKeyboard")
+                    }
+                }
             }.tabItem { Label("Read", systemImage: "book") }.tag(0)
             NavigationStack {
                 VStack { lookup; if !model.status.isEmpty { Text(model.status).font(.footnote).padding() } }

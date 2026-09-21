@@ -93,3 +93,7 @@ all 127 files and 17 collections are included, with a SHA-256 manifest and full
 ZIP CRC verification. Dictionaries are never included in Git or CI artifacts.
 Physical iPhone installation, full-size import, Apple translation, and real-device
 media playback still require testing on the user's iPhone.
+
+## Version 1.2
+
+A system Paste button inserts clipboard text without opening the keyboard. The reading screen scrolls, keeps a 220-point editor, and uses a compact title. Read and Done are available above the keyboard. Install the updated IPA over the existing app with the same Apple account to preserve dictionaries and saved passages.

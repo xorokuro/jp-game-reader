@@ -1,6 +1,22 @@
 import XCTest
 
 final class ReaderUITests: XCTestCase {
+    func testPasteButton() {
+        let app = XCUIApplication()
+        app.launch()
+        let editor = app.textViews["passageEditor"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 10))
+        editor.tap(); editor.typeText("Clipboard passage")
+        app.buttons["dismissKeyboard"].tap()
+        app.buttons["Copy learning prompt"].tap()
+        app.swipeDown()
+        let paste = app.buttons["pastePassage"]
+        XCTAssertTrue(paste.waitForExistence(timeout: 5))
+        paste.tap()
+        XCTAssertTrue((editor.value as? String ?? "").contains("Help me study this Japanese passage."))
+        XCTAssertTrue((editor.value as? String ?? "").contains("Clipboard passage"))
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
+    }
     func testReadSaveAndSearchWithoutDictionary() {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -13,6 +29,14 @@ final class ReaderUITests: XCTestCase {
         add(readerScreenshot)
         editor.tap()
         editor.typeText("Japanese reading test")
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(min(editor.frame.maxY, keyboard.frame.minY) - max(editor.frame.minY, 0), 100, "Passage must remain visible above the keyboard")
+        XCTAssertTrue(app.buttons["dismissKeyboard"].isHittable)
+        let keyboardShot = XCTAttachment(screenshot: app.screenshot())
+        keyboardShot.name = "Visible passage with keyboard"
+        keyboardShot.lifetime = .keepAlways
+        add(keyboardShot)
         app.buttons["openPassage"].tap()
         XCTAssertEqual(app.switches["autoSavePassages"].value as? String, "0")
         app.tabBars.buttons["Library"].tap()
