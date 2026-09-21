@@ -145,14 +145,14 @@ struct ReaderHome: View {
                         Text("Paste / edit").tag(true); Text("Read / select words").tag(false)
                     }.pickerStyle(.segmented)
                     if editing {
-                        TextEditor(text: $model.text).font(.system(size: 21)).overlay(RoundedRectangle(cornerRadius: 12).stroke(.secondary.opacity(0.3)))
+                        TextEditor(text: $model.text).font(.system(size: 21)).accessibilityIdentifier("passageEditor").overlay(RoundedRectangle(cornerRadius: 12).stroke(.secondary.opacity(0.3)))
                     } else {
                         SelectableJapanese(text: model.text) { word in
                             model.word = word; model.search()
                         }
                     }
                     HStack {
-                        Button("Read") { editing = false; UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }.buttonStyle(.borderedProminent)
+                        Button("Read") { editing = false; UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }.buttonStyle(.borderedProminent).accessibilityIdentifier("openPassage")
                         Button("Save") { model.save() }.buttonStyle(.bordered)
                         Button("Translate") { translation = true }.buttonStyle(.bordered).disabled(model.text.isEmpty)
                             .translationPresentation(isPresented: $translation, text: model.text)
@@ -193,6 +193,7 @@ struct ReaderHome: View {
                 }.navigationTitle("Library & setup")
             }.tabItem { Label("Library", systemImage: "books.vertical") }.tag(2)
         }
+        .onChange(of: selectedTab) { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.folder]) { result in
             switch result {
             case .success(let folder): model.importFolder(folder)

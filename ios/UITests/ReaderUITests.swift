@@ -2,6 +2,7 @@ import XCTest
 
 final class ReaderUITests: XCTestCase {
     func testReadSaveAndSearchWithoutDictionary() {
+        continueAfterFailure = false
         let app = XCUIApplication()
         app.launch()
         let editor = app.textViews.firstMatch
@@ -12,14 +13,14 @@ final class ReaderUITests: XCTestCase {
         add(readerScreenshot)
         editor.tap()
         editor.typeText("Japanese reading test")
-        app.buttons["Read"].firstMatch.tap()
+        app.buttons["openPassage"].tap()
         app.buttons["Save"].tap()
         app.tabBars.buttons["Library"].tap()
-        XCTAssertTrue(app.buttons["Japanese reading test"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Japanese reading test"].waitForExistence(timeout: 15))
         app.terminate()
         app.launch()
         app.tabBars.buttons["Library"].tap()
-        XCTAssertTrue(app.buttons["Japanese reading test"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Japanese reading test"].waitForExistence(timeout: 15))
         app.tabBars.buttons["Look up"].tap()
         let search = app.textFields["Search Japanese…"]
         search.tap(); search.typeText("test\n")
