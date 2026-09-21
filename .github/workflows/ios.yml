@@ -2,6 +2,7 @@ name: Build iPhone app
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     paths:
       - 'ios/**'
       - '.github/workflows/ios.yml'
