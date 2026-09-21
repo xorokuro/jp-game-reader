@@ -7,7 +7,16 @@ import WebKit
         // Use the Objective-C completion API: the runner's iOS runtime does not
         // include the newer libswiftWebKit async overlay. Both worlds share DOM.
         try await withCheckedThrowingContinuation { continuation in
+            var completed = false
+            let timeout = DispatchWorkItem {
+                guard !completed else { return }
+                completed = true
+                continuation.resume(throwing: NSError(domain: "SelectionTest", code: 1, userInfo: [NSLocalizedDescriptionKey: "WebKit evaluation timed out"]))
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: timeout)
             view.evaluateJavaScript(script) { value, error in
+                guard !completed else { return }
+                completed = true; timeout.cancel()
                 if let error { continuation.resume(throwing: error) }
                 else { continuation.resume(returning: value) }
             }
