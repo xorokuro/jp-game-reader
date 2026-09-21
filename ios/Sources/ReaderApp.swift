@@ -178,6 +178,16 @@ struct ReaderHome: View {
     @State private var librarySearch = ""
     @State private var deleteAll = false
     @FocusState private var passageFocused: Bool
+    @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("paletteAccent") private var accentRGB = 0x1F7A73
+    @AppStorage("palettePaper") private var paperRGB = 0xFFFFFF
+    @AppStorage("customReadingPaper") private var customPaper = false
+    private var paper: Color { customPaper ? Palette.color(paperRGB) : Color(uiColor: .systemBackground) }
+    private var ink: Color { customPaper ? Palette.ink(paperRGB) : .primary }
+    private var accent: Color { Palette.accessibleAccent(accentRGB, dark: colorScheme == .dark) }
+    private func colorBinding(_ value: Binding<Int>) -> Binding<Color> {
+        Binding(get: { Palette.color(value.wrappedValue) }, set: { value.wrappedValue = Palette.rgb($0) })
+    }
     private func read() {
         passageFocused = false
         model.readPassage(); editing = false
@@ -200,7 +210,7 @@ struct ReaderHome: View {
                             editing = true
                             passageFocused = false
                             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                        }.buttonStyle(.borderedProminent).accessibilityIdentifier("pastePassage")
+                        }.buttonStyle(.borderedProminent).tint(Palette.color(accentRGB)).foregroundStyle(Palette.ink(accentRGB)).accessibilityIdentifier("pastePassage")
                         Text("Paste Japanese from another app").font(.caption).foregroundStyle(.secondary)
                     }
                     Text("Paste a passage. Select a word to look it up.").font(.subheadline).foregroundStyle(.secondary)
@@ -210,14 +220,14 @@ struct ReaderHome: View {
                         Text("Paste / edit").tag(true); Text("Read / select words").tag(false)
                     }.pickerStyle(.segmented)
                     if editing {
-                        TextEditor(text: $model.text).font(.system(size: 21)).focused($passageFocused).frame(height: 220).accessibilityIdentifier("passageEditor").overlay(RoundedRectangle(cornerRadius: 12).stroke(.secondary.opacity(0.3)))
+                        TextEditor(text: $model.text).scrollContentBackground(.hidden).foregroundStyle(ink).background(paper).font(.system(size: 21)).focused($passageFocused).frame(height: 220).accessibilityIdentifier("passageEditor").overlay(RoundedRectangle(cornerRadius: 12).stroke(.secondary.opacity(0.3)))
                     } else {
-                        SelectableJapanese(text: model.text) { word in
+                        SelectableJapanese(text: model.text, ink: UIColor(ink), paper: UIColor(paper)) { word in
                             model.word = word; model.search()
                         }.frame(height: 280)
                     }
                     HStack {
-                        if !passageFocused { Button("Read") { read() }.buttonStyle(.borderedProminent).accessibilityIdentifier("openPassage") }
+                        if !passageFocused { Button("Read") { read() }.buttonStyle(.borderedProminent).tint(Palette.color(accentRGB)).foregroundStyle(Palette.ink(accentRGB)).accessibilityIdentifier("openPassage") }
                         Button("Save") { model.save() }.buttonStyle(.bordered)
                         Button("Translate") { translation = true }.buttonStyle(.bordered).disabled(model.text.isEmpty)
                             .translationPresentation(isPresented: $translation, text: model.text)
@@ -273,6 +283,16 @@ struct ReaderHome: View {
                         Button("Refresh dictionaries") { model.reload() }
                         ForEach(model.dictionaries, id: \.self) { Text($0).font(.footnote) }
                     }
+                    Section("Colors & contrast") {
+                        ColorPicker("Accent color", selection: colorBinding($accentRGB), supportsOpacity: false).accessibilityIdentifier("accentColor")
+                        Toggle("Custom reading background", isOn: $customPaper).accessibilityIdentifier("customPaper")
+                        if customPaper {
+                            ColorPicker("Reading background", selection: colorBinding($paperRGB), supportsOpacity: false)
+                        }
+                        Text("日本語 · Reading preview").font(.title3).foregroundStyle(ink).padding().frame(maxWidth: .infinity).background(paper, in: RoundedRectangle(cornerRadius: 10))
+                        Text("Text automatically switches between black and white for contrast. Links adjust for light and dark mode. Colors are remembered.").font(.caption)
+                        Button("Reset colors") { accentRGB = 0x1F7A73; paperRGB = 0xFFFFFF; customPaper = false }
+                    }
                     Section("Keep a backup") {
                         Text("Your passages and notes are in reading-library.json in Files → On My iPhone → Japanese Reader. Copy this file before uninstalling. Dictionary files can also be copied from here.").font(.footnote)
                     }
@@ -290,6 +310,7 @@ struct ReaderHome: View {
                     }
             }.tabItem { Label("Library", systemImage: "books.vertical") }.tag(2)
         }
+        .tint(accent)
         .onChange(of: selectedTab) { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.folder]) { result in
             switch result {
@@ -324,6 +345,8 @@ struct ReaderHome: View {
 
 struct SelectableJapanese: UIViewRepresentable {
     let text: String
+    var ink: UIColor = .label
+    var paper: UIColor = .systemBackground
     let selected: (String) -> Void
     func makeCoordinator() -> Coordinator { Coordinator(selected) }
     func makeUIView(context: Context) -> UITextView {
@@ -331,7 +354,10 @@ struct SelectableJapanese: UIViewRepresentable {
         view.font = .systemFont(ofSize: 23); view.backgroundColor = .clear; view.delegate = context.coordinator
         return view
     }
-    func updateUIView(_ view: UITextView, context: Context) { if view.text != text { view.text = text } }
+    func updateUIView(_ view: UITextView, context: Context) {
+        if view.text != text { view.text = text }
+        view.textColor = ink; view.backgroundColor = paper
+    }
     final class Coordinator: NSObject, UITextViewDelegate {
         let selected: (String) -> Void
         var pending: DispatchWorkItem?
