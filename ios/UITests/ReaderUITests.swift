@@ -43,7 +43,9 @@ final class ReaderUITests: XCTestCase {
         app.tabBars.buttons["Library"].tap()
         XCTAssertTrue(app.staticTexts["emptyLibrary"].waitForExistence(timeout: 10))
         app.tabBars.buttons["Read"].tap()
-        app.switches["autoSavePassages"].tap()
+        // SwiftUI exposes the entire labelled row as a switch. Its center is
+        // the label; target the visible switch control at the trailing edge.
+        app.switches["autoSavePassages"].coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
         XCTAssertEqual(app.switches["autoSavePassages"].value as? String, "1")
         app.textViews["passageEditor"].tap()
         app.textViews["passageEditor"].typeText("Automatically saved passage")
@@ -52,7 +54,7 @@ final class ReaderUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Automatically saved passage"].waitForExistence(timeout: 10))
         app.terminate(); app.launch()
         XCTAssertEqual(app.switches["autoSavePassages"].value as? String, "1")
-        app.switches["autoSavePassages"].tap()
+        app.switches["autoSavePassages"].coordinate(withNormalizedOffset: CGVector(dx: 0.93, dy: 0.5)).tap()
         app.textViews["passageEditor"].tap()
         app.textViews["passageEditor"].typeText("Keep this temporary")
         app.buttons["openPassage"].tap()

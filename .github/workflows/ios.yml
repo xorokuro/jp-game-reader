@@ -34,5 +34,8 @@ jobs:
         if: always()
         with:
           name: iPhone-test-results
-          path: ios/build/screenshots
+          path: |
+            ios/build/screenshots/*.png
+            ios/build/screenshots/*.txt
+            ios/build/screenshots/manifest.json
           retention-days: 7
