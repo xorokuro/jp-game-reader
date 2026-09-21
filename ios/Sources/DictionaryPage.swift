@@ -19,7 +19,8 @@ struct DictionaryPage: UIViewRepresentable {
         return result
     }
     static func make(body: String, css: String, code: String) -> String {
-        // JavaScript is disabled in WKWebView; CSP also prevents external requests.
+        // Dictionary-authored JavaScript is disabled; only our isolated selection observer runs.
+        // CSP continues to prevent external requests and page scripts.
         let clean = body.replacingOccurrences(of: "(?is)<(script|iframe|object|embed|form|head)\\b[^>]*>.*?</\\1\\s*>", with: "", options: .regularExpression)
             .replacingOccurrences(of: "(?is)<(base|meta|link)\\b[^>]*>", with: "", options: .regularExpression)
         let safeCSS = css.replacingOccurrences(of: "(?is)</style", with: "", options: .regularExpression)
@@ -28,28 +29,62 @@ struct DictionaryPage: UIViewRepresentable {
         <!doctype html><html lang="ja"><head><meta charset="utf-8">
         <meta name="viewport" content="width=device-width,initial-scale=1">
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src jpread: data:; media-src jpread:; font-src jpread:; style-src 'unsafe-inline' jpread:; script-src 'none'; frame-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'">
-        <style>\(safeCSS)</style><style>:root{color-scheme:light dark}body{font:19px -apple-system;line-height:1.65;padding:14px;overflow-wrap:anywhere}img{max-width:100%;height:auto}table{max-width:100%}ddudm,ddudc,ddudt{display:block}a{color:#3987dc}audio{max-width:100%}</style></head><body>\(rendered)</body></html>
+        <style>\(safeCSS)</style><style>:root{color-scheme:light dark}body{font:19px -apple-system;line-height:1.65;padding:14px;overflow-wrap:anywhere}img{max-width:100%;height:auto}table{max-width:100%}ddudm,ddudc,ddudt{display:block}a{color:#3987dc}audio{max-width:100%}body,body *{-webkit-user-select:text;user-select:text}::selection{background:#93c5fd;color:#111}</style></head><body>\(rendered)</body></html>
         """
     }
+    static let selectionWorld = WKContentWorld.world(name: "JapaneseReaderSelection")
+    static let selectionScript = """
+    (() => {
+        let pending, previous = "";
+        document.addEventListener("selectionchange", () => {
+            clearTimeout(pending);
+            const text = window.getSelection()?.toString().trim() || "";
+            if (!text || Array.from(text).length > 80) { previous = ""; return; }
+            pending = setTimeout(() => {
+                const current = window.getSelection()?.toString().trim() || "";
+                if (current !== text || current === previous) return;
+                previous = current;
+                window.webkit.messageHandlers.readerSelection.postMessage(current);
+            }, 400);
+        });
+    })();
+    """
     func makeCoordinator() -> Coordinator { Coordinator(root: root, code: code, lookup: lookup) }
-    func makeUIView(context: Context) -> WKWebView {
+    static func makeWebView(html: String, coordinator: Coordinator) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = false
         configuration.websiteDataStore = .nonPersistent()
-        configuration.setURLSchemeHandler(context.coordinator, forURLScheme: "jpread")
+        configuration.setURLSchemeHandler(coordinator, forURLScheme: "jpread")
+        configuration.userContentController.add(coordinator, contentWorld: selectionWorld, name: "readerSelection")
+        configuration.userContentController.addUserScript(WKUserScript(source: selectionScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: selectionWorld))
         let view = WKWebView(frame: .zero, configuration: configuration)
-        view.navigationDelegate = context.coordinator
+        view.accessibilityIdentifier = "dictionaryEntryPage"
+        view.navigationDelegate = coordinator
         view.loadHTMLString(html, baseURL: URL(string: "jpread://dictionary/"))
         return view
     }
+    func makeUIView(context: Context) -> WKWebView { Self.makeWebView(html: html, coordinator: context.coordinator) }
+    // Search results update the surrounding SwiftUI view. Never reload the document
+    // here: that would discard the native selection handles and scroll position.
     func updateUIView(_ view: WKWebView, context: Context) {}
-    final class Coordinator: NSObject, WKURLSchemeHandler, WKNavigationDelegate {
+    static func dismantleUIView(_ view: WKWebView, coordinator: Coordinator) {
+        view.configuration.userContentController.removeScriptMessageHandler(forName: "readerSelection", contentWorld: selectionWorld)
+        view.stopLoading()
+    }
+    final class Coordinator: NSObject, WKURLSchemeHandler, WKNavigationDelegate, WKScriptMessageHandler {
         let root: URL
         let code: String
         let lookup: (String) -> Void
         let queue = DispatchQueue(label: "JapaneseReader.media")
         var cancelled = Set<ObjectIdentifier>()
         init(root: URL, code: String, lookup: @escaping (String) -> Void) { self.root = root; self.code = code; self.lookup = lookup }
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.name == "readerSelection", message.frameInfo.isMainFrame,
+                  let text = message.body as? String else { return }
+            let word = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !word.isEmpty, word.count <= 40 else { return }
+            lookup(word)
+        }
         func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
             let id = ObjectIdentifier(urlSchemeTask)
             cancelled.remove(id)

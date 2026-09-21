@@ -32,6 +32,7 @@ struct InstalledDictionary: Identifiable {
     }
     @Published private(set) var recentlyDeleted: [SavedText] = []
     @Published var entryHTML = ""
+    @Published var entryID = UUID()
     @Published var entryCode = ""
     @Published var showingEntry = false
     private var searchGeneration = 0
@@ -84,8 +85,12 @@ struct InstalledDictionary: Identifiable {
         UserDefaults.standard.set(dictionaryOrder, forKey: "dictionaryOrder")
         searchGeneration += 1; hits = []; busy = false
     }
-    func search() {
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    func searchSelection(_ selected: String) {
+        word = selected
+        search(dismissKeyboard: false)
+    }
+    func search(dismissKeyboard: Bool = true) {
+        if dismissKeyboard { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
         searchGeneration += 1
         let generation = searchGeneration, query = word
         let selected = dictionaries.filter { !disabledDictionaries.contains($0.id) }
@@ -117,7 +122,7 @@ struct InstalledDictionary: Identifiable {
             DispatchQueue.main.async {
                 self.busy = false
                 switch result {
-                case .success(let html): self.entryHTML = html; self.entryCode = hit.code; self.entryRoot = root; self.showingEntry = true
+                case .success(let html): self.entryHTML = html; self.entryCode = hit.code; self.entryRoot = root; self.entryID = UUID(); self.showingEntry = true
                 case .failure(let error): self.status = error.localizedDescription
                 }
             }
@@ -258,7 +263,7 @@ struct ReaderHome: View {
                         TextEditor(text: $model.text).scrollContentBackground(.hidden).foregroundStyle(ink).background(paper).font(.system(size: 21)).focused($passageFocused).frame(height: 220).accessibilityIdentifier("passageEditor").overlay(RoundedRectangle(cornerRadius: 12).stroke(.secondary.opacity(0.3)))
                     } else {
                         SelectableJapanese(text: model.text, ink: UIColor(ink), paper: UIColor(paper)) { word in
-                            model.word = word; model.search()
+                            model.searchSelection(word)
                         }.frame(height: 280)
                     }
                     HStack {
@@ -362,11 +367,27 @@ struct ReaderHome: View {
         }
         .sheet(isPresented: $model.showingEntry) {
             NavigationStack {
-                DictionaryPage(html: model.entryHTML, root: model.entryRoot ?? model.dictionaryRoot, code: model.entryCode) { word in
-                    model.showingEntry = false; model.word = word; model.search()
+                VStack(spacing: 0) {
+                    DictionaryPage(html: model.entryHTML, root: model.entryRoot ?? model.dictionaryRoot, code: model.entryCode) { word in
+                        model.searchSelection(word)
+                    }.id(model.entryID)
+                    Divider()
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(model.word.isEmpty ? "Select text above to look it up" : "Looking up: " + model.word).font(.subheadline).lineLimit(2).accessibilityIdentifier("entryLookupWord")
+                            Spacer()
+                            if model.busy { ProgressView() }
+                        }.padding(.horizontal)
+                        List(model.hits, id: \.identity) { hit in
+                            Button { model.open(hit) } label: {
+                                VStack(alignment: .leading) { Text(hit.word); Text(hit.dictionary).font(.caption).foregroundStyle(.secondary) }
+                            }
+                        }.listStyle(.plain)
+                        if !model.status.isEmpty { Text(model.status).font(.caption).foregroundStyle(.secondary).padding(.horizontal).lineLimit(2) }
+                    }.frame(height: 200).padding(.vertical, 8)
                 }.navigationTitle("Dictionary entry").navigationBarTitleDisplayMode(.inline)
                     .toolbar { Button("Done") { model.showingEntry = false } }
-            }
+            }.presentationDetents([.large])
         }
     }
     private var lookup: some View {
@@ -393,12 +414,14 @@ struct SelectableJapanese: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(selected) }
     func makeUIView(context: Context) -> UITextView {
         let view = UITextView(); view.isEditable = false; view.isSelectable = true
+        view.accessibilityIdentifier = "selectablePassage"
         view.font = .systemFont(ofSize: 23); view.backgroundColor = .clear; view.delegate = context.coordinator
         return view
     }
     func updateUIView(_ view: UITextView, context: Context) {
         if view.text != text { view.text = text }
-        view.textColor = ink; view.backgroundColor = paper
+        if view.textColor != ink { view.textColor = ink }
+        if view.backgroundColor != paper { view.backgroundColor = paper }
     }
     final class Coordinator: NSObject, UITextViewDelegate {
         let selected: (String) -> Void
@@ -407,7 +430,11 @@ struct SelectableJapanese: UIViewRepresentable {
         func textViewDidChangeSelection(_ textView: UITextView) {
             pending?.cancel()
             guard let range = textView.selectedTextRange, let word = textView.text(in: range), !word.isEmpty, word.count <= 40 else { return }
-            let action = DispatchWorkItem { self.selected(word) }
+            let selectedRange = textView.selectedRange
+            let action = DispatchWorkItem { [weak textView, weak self] in
+                guard let textView, textView.selectedRange == selectedRange else { return }
+                self?.selected(word)
+            }
             pending = action; DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: action)
         }
     }

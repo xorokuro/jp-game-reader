@@ -68,7 +68,7 @@ downloads. Its translation capability and available languages depend on the phon
 The Windows Argos runtime and LM Studio do **not** run inside this iOS app.
 No background PC translation service is required or configured.
 
-Dictionary HTML has scripting and external network access disabled. Supplied
+Dictionary-authored scripts and external network access are disabled. An app-owned isolated selection observer supports automatic lookup without changing the selected range. Supplied
 images/fonts and supported audio formats are read locally. iOS may not play every
 legacy audio format (for example Speex). Source dictionaries that rely on scripts
 can display differently. Entry links open a new dictionary search.
@@ -102,3 +102,6 @@ A system Paste button inserts clipboard text without opening the keyboard. The r
 Library → Colors & contrast offers any accent color and an optional custom reading background. Reading text chooses black/white for contrast; accent links adjust for system light/dark surfaces. Dictionary entry HTML retains its own styles.
 
 Library offers per-dictionary toggles and Edit → drag handles for lookup order. Preferences persist. Add dictionary pack imports another indexed folder alongside existing dictionaries, without replacing or redownloading them. Packs contain mdict-index.sqlite3 plus their referenced source files; raw MDX/MDD alone are not yet indexed on the phone. Use export_dictionary_pack.py to export a single dictionary from a portable indexed collection. Extract its ZIP in Files, then select dictionary-pack using Add dictionary pack.
+
+## Version 1.3
+Automatic selection lookup no longer resigns the reader's first responder. Adjusting a highlight searches the new selection while keeping its handles. Dictionary entry pages also support selection lookup, with results below the original page. Selection-triggered searches do not dismiss or reload the entry; opening a result explicitly navigates to that entry.
