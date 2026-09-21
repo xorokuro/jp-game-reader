@@ -26,3 +26,19 @@ targets:
     dependencies:
       - sdk: libsqlite3.tbd
       - sdk: libz.tbd
+  ReaderUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: JapaneseReader
+schemes:
+  JapaneseReader:
+    build:
+      targets:
+        JapaneseReader: all
+    test:
+      targets: [ReaderUITests]

@@ -7,16 +7,28 @@ struct DictionaryPage: UIViewRepresentable {
     let root: URL
     let code: String
     let lookup: (String) -> Void
+    static func audioLinks(_ source: String) -> String {
+        guard let pattern = try? NSRegularExpression(pattern: "(?is)<a\\b[^>]*href=[\"']sound://([^\"']+)[\"'][^>]*>.*?</a>") else { return source }
+        var result = source
+        for match in pattern.matches(in: source, range: NSRange(source.startIndex..., in: source)).reversed() {
+            guard let range = Range(match.range, in: result), let nameRange = Range(match.range(at: 1), in: source) else { continue }
+            let name = String(source[nameRange]).replacingOccurrences(of: "\\", with: "/").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            let encoded = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? ""
+            result.replaceSubrange(range, with: "<audio controls preload=\"none\" src=\"jpread://dictionary/\(encoded)\"></audio>")
+        }
+        return result
+    }
     static func make(body: String, css: String, code: String) -> String {
         // JavaScript is disabled in WKWebView; CSP also prevents external requests.
         let clean = body.replacingOccurrences(of: "(?is)<(script|iframe|object|embed|form|head)\\b[^>]*>.*?</\\1\\s*>", with: "", options: .regularExpression)
             .replacingOccurrences(of: "(?is)<(base|meta|link)\\b[^>]*>", with: "", options: .regularExpression)
         let safeCSS = css.replacingOccurrences(of: "(?is)</style", with: "", options: .regularExpression)
+        let rendered = audioLinks(clean)
         return """
         <!doctype html><html lang="ja"><head><meta charset="utf-8">
         <meta name="viewport" content="width=device-width,initial-scale=1">
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src jpread: data:; media-src jpread:; font-src jpread:; style-src 'unsafe-inline' jpread:; script-src 'none'; frame-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'">
-        <style>\(safeCSS)</style><style>:root{color-scheme:light dark}body{font:19px -apple-system;line-height:1.65;padding:14px;overflow-wrap:anywhere}img{max-width:100%;height:auto}table{max-width:100%}ddudm,ddudc,ddudt{display:block}a{color:#3987dc}audio{max-width:100%}</style></head><body>\(clean)</body></html>
+        <style>\(safeCSS)</style><style>:root{color-scheme:light dark}body{font:19px -apple-system;line-height:1.65;padding:14px;overflow-wrap:anywhere}img{max-width:100%;height:auto}table{max-width:100%}ddudm,ddudc,ddudt{display:block}a{color:#3987dc}audio{max-width:100%}</style></head><body>\(rendered)</body></html>
         """
     }
     func makeCoordinator() -> Coordinator { Coordinator(root: root, code: code, lookup: lookup) }

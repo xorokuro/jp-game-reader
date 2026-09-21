@@ -13,10 +13,22 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - name: Test native dictionary engine
+        run: python3 ios/test_core.py
       - name: Build unsigned device app
         run: bash ios/build.sh
+      - name: Test iPhone interface
+        run: |
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for devices in d["devices"].values() for x in devices if "iPhone" in x["name"]))')
+          xcodebuild -project ios/JapaneseReader.xcodeproj -scheme JapaneseReader -destination "platform=iOS Simulator,id=$DEVICE" -resultBundlePath ios/build/UIResults.xcresult CODE_SIGNING_ALLOWED=NO test
       - uses: actions/upload-artifact@v4
         with:
           name: JapaneseReader-iPhone
           path: ios/build/JapaneseReader.ipa
           retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iPhone-test-results
+          path: ios/build/UIResults.xcresult
+          retention-days: 7
