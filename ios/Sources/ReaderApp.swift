@@ -106,7 +106,8 @@ struct LookupSnapshot {
         else {
             word = previous.query; hits = previous.hits; dictionarySelection = ""
             showingEntry = false; showingLookup = previous.showingLookup; status = ""
-            lookupNavigation = UUID()
+            // Already on Search: do not emit a new navigation event here, which
+            // would override the Back action's request to focus the search field.
         }
     }
     func showResults() {
