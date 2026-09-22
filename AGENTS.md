@@ -18,10 +18,10 @@ avoid creating game-specific copies of the whole codebase.
 - Preserve original Japanese text and user edits through capture/translation changes.
 - Do not point tests at a real journal, stop a user's running reader, or migrate their
   original Fortune Weave installation as a side effect of a code change.
-- Run `python -m unittest -v test_profiles test_reader test_translation_backends` for profile or journal lifecycle changes.
+- Run `python -m unittest -v test_profiles test_reader test_translation_backends test_unified` for profile or journal lifecycle changes.
 - Keep the server bound to loopback and preserve Host/Origin checks.
-- Current capture requires a visible OBS projector; direct OBS capture is planned,
-  not implemented. Keep documentation honest about tested compatibility.
+- Current capture supports a visible OBS projector or an explicitly selected visible
+  Windows game window; direct OBS WebSocket capture is planned, not implemented. Keep documentation honest about tested compatibility.
 - Prefer game-neutral code and per-profile settings to hard-coded titles or paths.
 
 - Translation providers are registered in translation_backends.py. Keep Argos fully

@@ -24,7 +24,7 @@ def bootstrap(path):
       const saved='''+json.dumps(values,ensure_ascii=True)+''';
       const allowed=k=>/^(fortune-|dimension-journal-|jp-reader-)/.test(k);
       try {
-        for(const key of Object.keys(localStorage))if(allowed(key))localStorage.removeItem(key);
+        if(Object.keys(saved).length)for(const key of Object.keys(localStorage))if(allowed(key))localStorage.removeItem(key);
         for(const [key,value] of Object.entries(saved))localStorage.setItem(key,value);
       } catch {}
       const set=Storage.prototype.setItem, remove=Storage.prototype.removeItem;

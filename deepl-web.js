@@ -27,7 +27,7 @@
   const ready=active&&info.available&&info.models.some(m=>m.id===select.value&&['ready','loaded'].includes(m.state));
   engine.disabled=busy;select.disabled=busy||!info?.available;refresh.disabled=busy;
   load.disabled=busy||!info?.available||!select.value;
-  manual.disabled=busy||!ready;document.getElementById('paste-translate').disabled=busy||!ready;
+  manual.disabled=busy||!ready;
  }
  async function listModels(){
   const response=await fetch('/api/translation-options');const data=await response.json();
@@ -61,6 +61,6 @@
   }catch(error){feedback.textContent=error.message;}
   finally{busy=false;update();}
  };
- manual.disabled=true;document.getElementById('paste-translate').disabled=true;
+ manual.disabled=true;
  listModels().catch(error=>feedback.textContent=error.message);
 })();
