@@ -378,6 +378,8 @@ struct LookupSnapshot {
 struct ReaderHome: View {
     @EnvironmentObject var model: ReaderModel
     @State private var importing = false
+    @State private var keyboardVisible = false
+    @State private var clearedPassage: String?
     @State private var translation = false
     @State private var selectedTab = 0
     @State private var editing = true
@@ -398,6 +400,19 @@ struct ReaderHome: View {
     private func colorBinding(_ value: Binding<Int>) -> Binding<Color> {
         Binding(get: { Palette.color(value.wrappedValue) }, set: { value.wrappedValue = Palette.rgb($0) })
     }
+    private func dismissKeyboard() {
+        passageFocused = false
+        wantsSearchFocus = false
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+    private func clearPassage() {
+        clearedPassage = model.text
+        model.cancelPendingSearch()
+        model.text = ""; model.readerOffset = .zero; model.readerSelection = ""
+        model.status = "Passage cleared."
+        editing = true
+        dismissKeyboard()
+    }
     private func read() {
         passageFocused = false
         model.readPassage(); editing = false
@@ -412,6 +427,27 @@ struct ReaderHome: View {
             readerTab
             searchTab
             libraryTab
+        }
+        .background(KeyboardDismissArea(enabled: keyboardVisible && selectedTab != 2, dismiss: dismissKeyboard))
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboardVisible = true }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboardVisible = false }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if keyboardVisible {
+                HStack {
+                    if selectedTab == 0 && passageFocused {
+                        Button("Read") { read() }.accessibilityIdentifier("openPassage")
+                    } else {
+                        Button("Read") { dismissKeyboard(); selectedTab = 0 }.accessibilityIdentifier("keyboardReadTab")
+                    }
+                    Spacer()
+                    Button("Search") { selectedTab = 1; requestSearchFocus() }.accessibilityIdentifier("keyboardSearchTab")
+                    Spacer()
+                    Button("Library") { dismissKeyboard(); selectedTab = 2 }.accessibilityIdentifier("keyboardLibraryTab")
+                    Spacer()
+                    Button("Done") { dismissKeyboard() }.accessibilityIdentifier("dismissKeyboard")
+                }.font(.subheadline).padding(.horizontal).frame(minHeight: 44).background(paper)
+                    .overlay(alignment: .top) { Divider() }
+            }
         }
         .tint(accent)
         .foregroundStyle(ink)
@@ -485,6 +521,13 @@ struct ReaderHome: View {
                 }.background(paper)
                 .navigationTitle("Japanese Reader").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        if model.text.isEmpty, let previous = clearedPassage {
+                            Button("Undo clear") { model.text = previous; clearedPassage = nil; model.status = "" }.accessibilityIdentifier("undoClearPassage")
+                        } else {
+                            Button("Clear") { clearPassage() }.disabled(model.text.isEmpty).accessibilityIdentifier("clearPassage")
+                        }
+                    }
                     ToolbarItem(placement: .topBarTrailing) {
                         if !editing {
                             Menu("Actions") {
@@ -493,14 +536,7 @@ struct ReaderHome: View {
                             }.translationPresentation(isPresented: $translation, text: model.text)
                         }
                     }
-                    ToolbarItemGroup(placement: .keyboard) {
-                        if passageFocused { Button("Read") { read() }.accessibilityIdentifier("openPassage") }
-                        Spacer()
-                        Button("Done") {
-                            passageFocused = false
-                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                        }.accessibilityIdentifier("dismissKeyboard")
-                    }
+
                 }
             }
             .toolbarBackground(paper, for: .tabBar, .navigationBar)

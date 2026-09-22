@@ -167,3 +167,5 @@ A synthetic Japanese dictionary fixture exists only in DEBUG builds, opt-in via
 Swipe left from the right edge, or right from the left edge, to return to the previous Search page. History includes entry pages and intermediate search results; returning to an entry restores its scroll position. Back from the root search page returns to Read. Edge gestures leave normal text selection and horizontal dictionary chips available.
 
 Copy learning prompt uses the actual highlighted reader text (or dictionary text from the entry menu). With no selection, it includes the entire reader passage. It never treats a stale search query as a highlighted word.
+
+Tap a blank area outside text fields on Read or Search to hide the keyboard. While the keyboard is open, a bottom bar keeps Read, Search, Library and Done available. Clear empties the current reader passage without deleting saved passages; Undo clear restores it during the same session.

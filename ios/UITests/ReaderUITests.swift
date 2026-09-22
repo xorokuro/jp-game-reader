@@ -1,6 +1,29 @@
 import XCTest
 
 final class ReaderUITests: XCTestCase {
+    func testBackgroundDismissClearUndoAndKeyboardNavigation() {
+        let app = XCUIApplication()
+        app.launch()
+        let editor = app.textViews["passageEditor"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 10))
+        editor.tap(); editor.typeText("Passage to clear")
+        XCTAssertTrue(app.buttons["keyboardLibraryTab"].isHittable)
+        app.staticTexts["Paste a passage. Select a word to look it up."].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+        app.buttons["clearPassage"].tap()
+        XCTAssertEqual(editor.value as? String, "")
+        app.buttons["undoClearPassage"].tap()
+        XCTAssertEqual(editor.value as? String, "Passage to clear")
+        app.tabBars.buttons["Search"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+        app.textFields["dictionarySearchField"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        app.buttons["keyboardLibraryTab"].tap()
+        XCTAssertTrue(app.navigationBars["Library & setup"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+    }
     func testLiveJapaneseSearchDictionarySwitcherAndBack() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-dictionary-fixture"]
