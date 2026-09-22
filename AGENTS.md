@@ -4,6 +4,10 @@
   Do not enable, dispatch, rerun, or add automatic workflow triggers. Keep changes
   code-only or validate locally; do not use a paid cloud build substitute. Any future
   Actions usage requires new explicit user authorization. Use [skip ci] on code commits.
+  On 2026-09-22 the user authorized a one-off source-only public build in
+  xorokuro/japanese-reader-ios-build, followed by disabling Actions and making that
+  repository private again. This does not authorize builds in private repositories
+  or ongoing automated builds.
 
 This is the shared base for Japanese learning across pasted text, books, articles and games. Read README.md and
 ROADMAP.md before changing it. Keep paste-first reading and offline dictionaries usable without OBS or LM Studio.

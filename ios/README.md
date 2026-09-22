@@ -164,9 +164,10 @@ A synthetic Japanese dictionary fixture exists only in DEBUG builds, opt-in via
 --ui-dictionary-fixture, in a temporary folder separate from user documents.
 
 ## Version 1.5
-GitHub Actions is disabled at the user's request to avoid further build charges.
-Code updates do not trigger builds. The latest source includes a search-focus fix
-that has not been compiled into a new IPA; use local macOS/Xcode for future builds.
+GitHub Actions remains disabled in this private repository to avoid build charges.
+The user authorized a separate, source-only public repository for the 1.5 build;
+the resulting IPA includes the search-focus fix. Code updates here do not trigger
+builds. Future cloud builds require explicit authorization and must avoid paid usage.
 
 Swipe left from the right edge, or right from the left edge, to return to the previous Search page. History includes entry pages and intermediate search results; returning to an entry restores its scroll position. Back from the root search page returns to Read. Edge gestures leave normal text selection and horizontal dictionary chips available.
 
