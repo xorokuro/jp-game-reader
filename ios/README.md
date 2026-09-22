@@ -100,7 +100,7 @@ media playback still require testing on the user's iPhone.
 A system Paste button inserts clipboard text without opening the keyboard. The reading screen scrolls, keeps a 220-point editor, and uses a compact title. Read and Done are available above the keyboard. Install the updated IPA over the existing app with the same Apple account to preserve dictionaries and saved passages.
 
 ### Colors and dictionary choices
-Library → Colors & contrast offers any accent color and an optional custom app background. Reading text chooses black/white for contrast; accent links adjust for system light/dark surfaces. Custom backgrounds also apply to dictionary entry pages, with contrasting text; images retain their original colors.
+Library → Colors & contrast offers any accent color and an optional custom app background. (Renamed to Library → Appearance in 1.6, which keeps these controls under the Custom theme.) Reading text chooses black/white for contrast; accent links adjust for system light/dark surfaces. Custom backgrounds also apply to dictionary entry pages, with contrasting text; images retain their original colors.
 
 Library offers per-dictionary toggles and Edit → drag handles for lookup order. Preferences persist. Add dictionary pack imports another indexed folder alongside existing dictionaries, without replacing or redownloading them. Packs contain mdict-index.sqlite3 plus their referenced source files; raw MDX/MDD alone are not yet indexed on the phone. Use export_dictionary_pack.py to export a single dictionary from a portable indexed collection. Extract its ZIP in Files, then select dictionary-pack using Add dictionary pack.
 
@@ -174,3 +174,79 @@ Swipe left from the right edge, or right from the left edge, to return to the pr
 Copy learning prompt uses the actual highlighted reader text (or dictionary text from the entry menu). With no selection, it includes the entire reader passage. It never treats a stale search query as a highlighted word.
 
 Tap a blank area outside text fields on Read or Search to hide the keyboard. While the keyboard is open, a bottom bar keeps Read, Search, Library and Done available. Clear empties the current reader passage without deleting saved passages; Undo clear restores it during the same session.
+
+## Version 1.6 — Appearance themes and interface redesign
+
+This release changes only how the iPhone and iPad app looks. Reading, text
+selection, dictionary lookup, saved passages, notes, navigation, the keyboard
+bar and every existing setting behave exactly as in 1.5. The Windows reader is
+untouched: its palette engine lives in `style.css`, and no styling is shared.
+
+### Themes
+
+**Library → Appearance → Theme** offers ready-made palettes. Tap a swatch to
+apply it immediately:
+
+| Theme | Mode | Notes |
+| --- | --- | --- |
+| System | Automatic | Follows the iPhone's Light/Dark setting. Default. |
+| Washi Paper | Light | Warm white page, jade accent |
+| Sakura | Light | Soft blossom light |
+| Morning Mist | Light | Cool blue daylight |
+| Sepia Study | Light | Aged paper, easy on the eyes |
+| Midnight Ink | Dark | Deep navy, cyan accent |
+| Jade Lantern | Dark | Dark green reading room |
+| Plum Night | Dark | Violet dusk |
+| True Black | Dark | OLED friendly |
+| Custom | Your colors | The accent and background pickers from 1.2 |
+
+Choosing a Light or Dark theme holds that appearance regardless of the iPhone's
+system setting; **System** keeps following it. Every theme picks its own reading
+ink (black or white) and adjusts its accent until it clears a 4.8:1 contrast
+ratio against both the page and the card surface, so text and links stay
+readable. Dictionary entry pages, navigation bars and the tab bar follow the
+same palette.
+
+Existing installs are preserved. A phone that already chose **Custom app
+background** opens on the Custom theme with the same colors; an install that
+only changed the accent color keeps the iOS system surfaces plus that accent.
+`Reset colors` returns to the System theme. The choice is stored in
+`readerThemePreset`; `paletteAccent`, `palettePaper` and `customReadingPaper`
+keep their earlier meanings.
+
+### Interface
+
+Read groups pasting, the auto-search and auto-save switches and the passage
+editor into distinct panels, with a placeholder in the empty editor and an
+accent focus ring while typing. Reading mode fills the screen on a card surface
+with wider margins and looser line height for Japanese, above a single action
+bar. Search has a raised search field with a circular submit button, capsule
+dictionary filters, card-shaped results with the headword, preview and a
+chevron, and an explanatory empty state. Library shows saved passages with a
+date line and note field, and the new Appearance section. Status messages appear
+as tinted notes instead of loose captions.
+
+### Verification for this release
+
+Checked on Windows, where no Swift toolchain exists:
+
+- Delimiter balance of every Swift source.
+- Every accessibility identifier and every literal string the UI tests look up
+  still exists in `ios/Sources` (`passageEditor`, `openPassage`, `clearPassage`,
+  `undoClearPassage`, `pastePassage`, `autoSavePassages`, `readerAutoSearch`,
+  `dictionaryAutoSearch`, `dictionarySearchField`, `selectablePassage`,
+  `dictionaryEntryPage`, `emptyLibrary`, `switchDictionary`, the
+  `searchScope_`/`dictionaryResult_` prefixes, the keyboard-bar buttons and the
+  "Library & setup" title).
+- Reading-view and editor layout heights were kept close to 1.5 so the keyboard
+  clearance assertion in `testReadSaveAndSearchWithoutDictionary` still holds.
+
+Still requires a Mac with Xcode, and then a physical device:
+
+- `bash ios/build.sh` (compilation, packaging, the Info.plist assertions).
+- `ReaderUnitTests`, including the new `ThemeTests` contrast and upgrade checks,
+  and `ReaderUITests` in a simulator.
+- Visual confirmation of each theme, the dictionary entry palette, Apple
+  translation, and media playback on the user's iPhone.
+
+No GitHub Actions workflow was enabled, dispatched or added for this change.
