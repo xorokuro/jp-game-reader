@@ -162,3 +162,8 @@ The WebKit palette uses an isolated, app-owned document-end script, avoiding the
 Swift WebKit evaluation overlay that failed to load in the previous simulator run.
 A synthetic Japanese dictionary fixture exists only in DEBUG builds, opt-in via
 --ui-dictionary-fixture, in a temporary folder separate from user documents.
+
+## Version 1.5
+Swipe left from the right edge, or right from the left edge, to return to the previous Search page. History includes entry pages and intermediate search results; returning to an entry restores its scroll position. Back from the root search page returns to Read. Edge gestures leave normal text selection and horizontal dictionary chips available.
+
+Copy learning prompt uses the actual highlighted reader text (or dictionary text from the entry menu). With no selection, it includes the entire reader passage. It never treats a stale search query as a highlighted word.

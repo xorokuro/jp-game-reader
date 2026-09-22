@@ -20,6 +20,55 @@ import SQLite3
         XCTAssertTrue(model.entryHTML.contains("見本"))
         XCTAssertEqual(Set(model.entryMatches.map(\.code)), Set(["DEMO_A", "DEMO_B"]))
     }
+    func testPromptUsesActualSelectionAndFallsBackToPassage() throws {
+        let (model, root, suite) = try fixture()
+        defer { try? FileManager.default.removeItem(at: root); UserDefaults.standard.removePersistentDomain(forName: suite) }
+        model.text = "今日は日本語を勉強します。"
+        model.word = "stale search query"
+        XCTAssertTrue(model.prompt().hasSuffix(model.text))
+        XCTAssertFalse(model.prompt().contains("stale search query"))
+        model.readerSelection = "日本語"
+        XCTAssertTrue(model.prompt().hasSuffix("\n\n日本語"))
+        XCTAssertFalse(model.prompt().contains(model.text))
+        model.dictionarySelection = "勉強"
+        XCTAssertTrue(model.prompt(inDictionary: true).hasSuffix("\n\n勉強"))
+        model.dictionarySelection = ""
+        XCTAssertTrue(model.prompt(inDictionary: true).hasSuffix(model.text))
+        model.readerSelection = "  "
+        XCTAssertTrue(model.prompt().hasSuffix(model.text))
+        model.readerSelection = "日本語"
+        model.text = "新しい文章"
+        XCTAssertEqual(model.readerSelection, "")
+        XCTAssertTrue(model.prompt().hasSuffix("新しい文章"))
+    }
+    func testBackFromNestedSelectionResultsRestoresPreviousEntry() async throws {
+        let (model, root, suite) = try fixture()
+        defer { try? FileManager.default.removeItem(at: root); UserDefaults.standard.removePersistentDomain(forName: suite) }
+        try await settle(model)
+        model.word = "原因"; model.search(dismissKeyboard: false)
+        try await settle(model)
+        model.open(try XCTUnwrap(model.hits.first))
+        try await settle(model)
+        let entry = model.entryID
+        model.entryOffsets[entry] = CGPoint(x: 0, y: 150)
+        model.select("原因論", inDictionary: true)
+        try await settle(model)
+        XCTAssertFalse(model.showingEntry)
+        XCTAssertTrue(model.canGoBack)
+        model.open(try XCTUnwrap(model.hits.first))
+        try await settle(model)
+        model.backToPreviousEntry()
+        XCTAssertFalse(model.showingEntry, "Back returns to the results page that opened this entry")
+        XCTAssertEqual(model.word, "原因論")
+        model.backToPreviousEntry()
+        XCTAssertEqual(model.entryID, entry)
+        XCTAssertTrue(model.showingEntry)
+        XCTAssertEqual(model.entryOffsets[entry]?.y, 150)
+        model.backToPreviousEntry()
+        XCTAssertFalse(model.showingEntry)
+        XCTAssertEqual(model.word, "原因")
+        XCTAssertFalse(model.canGoBack)
+    }
     private func fixture() throws -> (ReaderModel, URL, String) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let dictionaries = root.appendingPathComponent("dictionaries")

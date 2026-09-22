@@ -25,8 +25,16 @@ struct EntryVisit {
     let alternatives: [DictionaryHit]
 }
 
+struct LookupSnapshot {
+    let visit: EntryVisit?
+    let visits: [EntryVisit]
+    let query: String
+    let hits: [DictionaryHit]
+    let showingLookup: Bool
+}
+
 @MainActor final class ReaderModel: ObservableObject {
-    @Published var text = ""
+    @Published var text = "" { didSet { if text != oldValue { readerSelection = "" } } }
     @Published var word = ""
     @Published var hits: [DictionaryHit] = []
     @Published var status = ""
@@ -54,6 +62,16 @@ struct EntryVisit {
     @Published var searchMode: DictionarySearchMode = .prefix
     @Published var searchScope = ""
     @Published private(set) var visits: [EntryVisit] = []
+    private var lookupHistory: [LookupSnapshot] = []
+    var canGoBack: Bool { !lookupHistory.isEmpty }
+    private func snapshot() -> LookupSnapshot {
+        let visit = showingEntry ? visits.last : nil
+        return LookupSnapshot(visit: visit, visits: visits, query: visit?.query ?? word, hits: visit?.matches ?? hits, showingLookup: showingLookup)
+    }
+    private func remember(_ page: LookupSnapshot) {
+        lookupHistory.append(page)
+        if lookupHistory.count > 30 { lookupHistory.removeFirst() }
+    }
     var entryOffsets: [UUID: CGPoint] = [:]
     var readerOffset: CGPoint = .zero
     private var liveSearch: DispatchWorkItem?
@@ -81,12 +99,20 @@ struct EntryVisit {
     }
     func backToPreviousEntry() {
         cancelPendingSearch()
-        if visits.count > 1 {
-            let removed = visits.removeLast(); entryOffsets.removeValue(forKey: removed.id)
-            if let previous = visits.last { display(previous) }
-        } else { showingEntry = false; showingLookup = false }
+        guard let previous = lookupHistory.popLast() else { showingEntry = false; showingLookup = false; return }
+        visits = previous.visits
+        if let visit = previous.visit { display(visit) }
+        else {
+            word = previous.query; hits = previous.hits; dictionarySelection = ""
+            showingEntry = false; showingLookup = previous.showingLookup; status = ""
+            lookupNavigation = UUID()
+        }
     }
-    func showResults() { cancelPendingSearch(); showingEntry = false; showingLookup = false }
+    func showResults() {
+        cancelPendingSearch()
+        if showingEntry { remember(snapshot()) }
+        showingEntry = false; showingLookup = false
+    }
     @Published var readerSelection = ""
     @Published var dictionarySelection = ""
     @Published var readerAutoSearch = true {
@@ -110,6 +136,7 @@ struct EntryVisit {
     }
     func closeLookup() {
         cancelPendingSearch()
+        lookupHistory = []
         showingLookup = false
         showingEntry = false
     }
@@ -177,6 +204,7 @@ struct EntryVisit {
         liveSearch?.cancel(); liveSearch = nil
         searchGeneration += 1
         let generation = searchGeneration, query = word
+        let previousPage = showingEntry ? snapshot() : nil
         let preferredRoot = entryRoot, preferredCode = entryCode
         let mode: DictionarySearchMode = openBestMatch ? .exact : (navigate ? .prefix : searchMode)
         let selected = dictionaries.filter { !disabledDictionaries.contains($0.id) && (navigate || searchScope.isEmpty || $0.id == searchScope) }
@@ -197,6 +225,7 @@ struct EntryVisit {
                     if openBestMatch, let hit = hits.first(where: { $0.root == preferredRoot && $0.code == preferredCode }) ?? hits.first {
                         self.open(hit)
                     } else if navigate && (!onlyIfMatched || !hits.isEmpty) {
+                        if let previousPage { self.remember(previousPage) }
                         self.showingEntry = false; self.showingLookup = true; self.lookupNavigation = UUID()
                     }
                 case .failure(let error): self.hits = []; self.status = error.localizedDescription
@@ -213,6 +242,7 @@ struct EntryVisit {
         let query = replacingCurrent ? (visits.last?.query ?? word) : word
         let matches = replacingCurrent ? (visits.last?.matches ?? hits) : hits
         let wasEntry = showingEntry
+        let previousPage = snapshot()
         let enabled = dictionaries.filter { !disabledDictionaries.contains($0.id) }
         lookupBusy = true
         queue.async {
@@ -237,6 +267,7 @@ struct EntryVisit {
                 self.lookupBusy = false
                 switch result {
                 case .success(let (html, alternatives)):
+                    if !replacingCurrent { self.remember(previousPage) }
                     if replacingCurrent, !self.visits.isEmpty {
                         let removed = self.visits.removeLast(); self.entryOffsets.removeValue(forKey: removed.id)
                     } else if !wasEntry && !self.showingLookup {
@@ -289,8 +320,11 @@ struct EntryVisit {
             recentlyDeleted = []; status = "Deleted passages restored."
         }
     }
-    func prompt() -> String {
-        "Help me study this Japanese passage. Translate into natural English and Traditional Chinese, explain grammar and vocabulary, give readings, and preserve the original Japanese. Do not invent missing context.\n\n\(text)" + (word.isEmpty ? "" : "\n\nFocus on this selected word in context: \(word)")
+    func prompt(inDictionary: Bool = false) -> String {
+        let selection = (inDictionary ? dictionarySelection : readerSelection).trimmingCharacters(in: .whitespacesAndNewlines)
+        let subject = selection.isEmpty ? text : selection
+        let kind = selection.isEmpty ? "passage" : "selected text"
+        return "Help me study this Japanese \(kind). Translate into natural English and Traditional Chinese, explain grammar and vocabulary, give readings, and preserve the original Japanese. Do not invent missing context.\n\n\(subject)"
     }
     func importFolder(_ source: URL) {
         guard !busy else { return }
@@ -486,15 +520,6 @@ struct ReaderHome: View {
                         guard selectedTab == 1, model.showingEntry else { return }
                         model.select(word, inDictionary: true)
                     }.id(visitID.uuidString + (customPaper ? String(paperRGB) : "system"))
-                        .overlay(alignment: .leading) {
-                            Color.clear.frame(width: 20).contentShape(Rectangle())
-                                .gesture(DragGesture(minimumDistance: 25).onEnded { value in
-                                    if value.translation.width > 60 && abs(value.translation.height) < 100 {
-                                        model.backToPreviousEntry()
-                                        if !model.showingEntry { requestSearchFocus() }
-                                    }
-                                })
-                        }
                     if !model.dictionarySelection.isEmpty {
                         Button("Search selected text") { model.searchSelected(inDictionary: true) }.padding(6)
                     }
@@ -502,12 +527,14 @@ struct ReaderHome: View {
                 } else { lookup(focusSearch: wantsSearchFocus) }
                 if !model.status.isEmpty { Text(model.status).font(.caption).padding(.horizontal, 8) }
             }.background(paper)
+                .overlay(alignment: .leading) { backSwipeEdge(fromLeft: true) }
+                .overlay(alignment: .trailing) { backSwipeEdge(fromLeft: false) }
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         if model.showingEntry {
-                            Button { model.backToPreviousEntry(); if !model.showingEntry { requestSearchFocus() } } label: { Image(systemName: "chevron.left") }.accessibilityLabel("Back")
-                        } else { Button("Back to Main Page") { selectedTab = 0 } }
+                            Button { goBackInSearch() } label: { Image(systemName: "chevron.left") }.accessibilityLabel("Back")
+                        } else { Button(model.canGoBack ? "Back" : "Back to Main Page") { goBackInSearch() } }
                     }
                     ToolbarItem(placement: .principal) {
                         if model.showingEntry {
@@ -523,6 +550,7 @@ struct ReaderHome: View {
                         if model.showingEntry {
                             Menu {
                                 Button("Search results") { model.showResults(); requestSearchFocus() }
+                                Button("Copy learning prompt") { UIPasteboard.general.string = model.prompt(inDictionary: true); model.status = "Learning prompt copied." }
                                 Button("Back to Main Page") { selectedTab = 0 }
                             } label: { Image(systemName: "line.3.horizontal") }.accessibilityLabel("Dictionary navigation")
                         }
@@ -540,6 +568,22 @@ struct ReaderHome: View {
         .toolbarBackground(paper, for: .tabBar, .navigationBar)
         .toolbarBackground(.visible, for: .tabBar, .navigationBar)
         .tabItem { Label("Search", systemImage: "magnifyingglass") }.tag(1)
+    }
+    private func goBackInSearch() {
+        if model.canGoBack {
+            model.backToPreviousEntry()
+            if !model.showingEntry { requestSearchFocus() }
+        } else { selectedTab = 0 }
+    }
+    private func backSwipeEdge(fromLeft: Bool) -> some View {
+        Color.clear.frame(width: 24).contentShape(Rectangle())
+            .accessibilityIdentifier(fromLeft ? "backSwipeLeftEdge" : "backSwipeRightEdge")
+            .gesture(DragGesture(minimumDistance: 25).onEnded { value in
+                let horizontal = value.translation.width
+                if abs(horizontal) > 65 && abs(horizontal) > abs(value.translation.height) * 2 && (fromLeft ? horizontal > 0 : horizontal < 0) {
+                    goBackInSearch()
+                }
+            })
     }
     private func requestSearchFocus() { wantsSearchFocus = true; searchFocusRequest += 1 }
     private var libraryTab: some View {

@@ -35,16 +35,17 @@ final class ReaderUITests: XCTestCase {
         XCTAssertTrue(app.webViews.links["製品"].waitForExistence(timeout: 15))
         app.webViews.links["製品"].tap()
         XCTAssertTrue(app.webViews.staticTexts["product"].waitForExistence(timeout: 15))
-        app.buttons["Back"].tap()
+        let page = app.webViews["dictionaryEntryPage"]
+        page.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).press(forDuration: 0.1, thenDragTo: page.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5)))
         XCTAssertTrue(app.webViews.links["製品"].waitForExistence(timeout: 15))
-        app.buttons["Back"].tap()
+        page.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.5)).press(forDuration: 0.1, thenDragTo: page.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.5)))
         XCTAssertTrue(app.webViews.links["実物"].waitForExistence(timeout: 15))
         app.buttons["Back"].tap()
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
         field.typeText("missing")
         XCTAssertEqual(field.value as? String, "missing")
-        app.buttons["Back to Main Page"].tap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.35)).press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.35)))
         XCTAssertTrue(app.textViews["passageEditor"].waitForExistence(timeout: 5))
     }
     func testSearchFocusSelectAllAndReturnToReader() {
