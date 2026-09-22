@@ -77,6 +77,7 @@ struct LookupSnapshot {
     private var liveSearch: DispatchWorkItem?
     func typedSearch(_ query: String) {
         cancelPendingSearch()
+        readerSelection = ""; dictionarySelection = ""
         word = query
         hits = []
         status = ""
@@ -113,6 +114,7 @@ struct LookupSnapshot {
         if showingEntry { remember(snapshot()) }
         showingEntry = false; showingLookup = false
     }
+    @Published var selectionFromDictionary = false
     @Published var readerSelection = ""
     @Published var dictionarySelection = ""
     @Published var readerAutoSearch = true {
@@ -123,6 +125,7 @@ struct LookupSnapshot {
     }
     func cancelPendingSearch() { liveSearch?.cancel(); liveSearch = nil; searchGeneration += 1; lookupBusy = false }
     func select(_ text: String, inDictionary: Bool) {
+        if !text.isEmpty { selectionFromDictionary = inDictionary }
         if inDictionary { dictionarySelection = text } else { readerSelection = text }
         cancelPendingSearch()
         guard !text.isEmpty, (inDictionary ? dictionaryAutoSearch : readerAutoSearch) else { return }
@@ -589,6 +592,11 @@ struct ReaderHome: View {
                                 Button("Copy learning prompt") { UIPasteboard.general.string = model.prompt(inDictionary: true); model.status = "Learning prompt copied." }
                                 Button("Back to Main Page") { selectedTab = 0 }
                             } label: { Image(systemName: "line.3.horizontal") }.accessibilityLabel("Dictionary navigation")
+                        } else {
+                            Button {
+                                UIPasteboard.general.string = model.prompt(inDictionary: model.selectionFromDictionary)
+                                model.status = "Learning prompt copied."
+                            } label: { Image(systemName: "doc.on.doc") }.accessibilityLabel("Copy learning prompt")
                         }
                     }
                 }
