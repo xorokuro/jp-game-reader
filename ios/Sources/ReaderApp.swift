@@ -22,6 +22,7 @@ struct EntryVisit {
     let html: String
     let query: String
     let matches: [DictionaryHit]
+    let alternatives: [DictionaryHit]
 }
 
 @MainActor final class ReaderModel: ObservableObject {
@@ -73,7 +74,7 @@ struct EntryVisit {
     private func display(_ visit: EntryVisit) {
         entryHTML = visit.html; entryRoot = visit.hit.root; entryCode = visit.hit.code
         entryTitle = visit.hit.word; entryDictionary = visit.hit.dictionary; entryHitIdentity = visit.hit.identity
-        entryID = visit.id; entryMatches = visit.matches
+        entryID = visit.id; entryMatches = visit.alternatives
         word = visit.query; hits = visit.matches; dictionarySelection = ""
         showingEntry = true; showingLookup = true; status = ""
         lookupNavigation = UUID()
@@ -211,23 +212,36 @@ struct EntryVisit {
         let root = hit.root
         let query = word, matches = hits
         let wasEntry = showingEntry
+        let enabled = dictionaries.filter { !disabledDictionaries.contains($0.id) }
         lookupBusy = true
         queue.async {
-            let result = Result { () -> String in
+            let result = Result { () -> (String, [DictionaryHit]) in
                 let store = try DictionaryStore(root: root)
-                return DictionaryPage.make(body: try store.entry(hit), css: try store.stylesheet(code: hit.code), code: hit.code)
+                let html = DictionaryPage.make(body: try store.entry(hit), css: try store.stylesheet(code: hit.code), code: hit.code)
+                // The title switcher spans all enabled dictionaries, even if Search
+                // was scoped to one dictionary (as in the reference recording).
+                var seen = Set<String>()
+                let alternatives = enabled.flatMap { dictionary -> [DictionaryHit] in
+                    guard let source = try? DictionaryStore(root: dictionary.root) else { return [] }
+                    var candidates = (try? source.search(hit.word, codes: [dictionary.code], mode: .exact)) ?? []
+                    if DictionaryStore.normalize(query) != DictionaryStore.normalize(hit.word) {
+                        candidates += (try? source.search(query, codes: [dictionary.code], mode: .exact)) ?? []
+                    }
+                    return candidates.filter { seen.insert($0.identity).inserted }
+                }
+                return (html, alternatives.isEmpty ? [hit] : alternatives)
             }
             DispatchQueue.main.async {
                 guard generation == self.searchGeneration else { return }
                 self.lookupBusy = false
                 switch result {
-                case .success(let html):
+                case .success(let (html, alternatives)):
                     if replacingCurrent, !self.visits.isEmpty {
                         let removed = self.visits.removeLast(); self.entryOffsets.removeValue(forKey: removed.id)
                     } else if !wasEntry && !self.showingLookup {
                         self.visits = []; self.entryOffsets = [:]
                     }
-                    let visit = EntryVisit(hit: hit, html: html, query: query, matches: matches)
+                    let visit = EntryVisit(hit: hit, html: html, query: query, matches: matches, alternatives: alternatives)
                     self.visits.append(visit)
                     if self.visits.count > 30 { let removed = self.visits.removeFirst(); self.entryOffsets.removeValue(forKey: removed.id) }
                     self.display(visit)
@@ -471,6 +485,15 @@ struct ReaderHome: View {
                         guard selectedTab == 1, model.showingEntry else { return }
                         model.select(word, inDictionary: true)
                     }.id(visitID.uuidString + (customPaper ? String(paperRGB) : "system"))
+                        .overlay(alignment: .leading) {
+                            Color.clear.frame(width: 20).contentShape(Rectangle())
+                                .gesture(DragGesture(minimumDistance: 25).onEnded { value in
+                                    if value.translation.width > 60 && abs(value.translation.height) < 100 {
+                                        model.backToPreviousEntry()
+                                        if !model.showingEntry { requestSearchFocus() }
+                                    }
+                                })
+                        }
                     if !model.dictionarySelection.isEmpty {
                         Button("Search selected text") { model.searchSelected(inDictionary: true) }.padding(6)
                     }
@@ -482,7 +505,7 @@ struct ReaderHome: View {
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         if model.showingEntry {
-                            Button { model.backToPreviousEntry(); if !model.showingEntry { focusSearch() } } label: { Image(systemName: "chevron.left") }.accessibilityLabel("Back")
+                            Button { model.backToPreviousEntry(); if !model.showingEntry { requestSearchFocus() } } label: { Image(systemName: "chevron.left") }.accessibilityLabel("Back")
                         } else { Button("Back to Main Page") { selectedTab = 0 } }
                     }
                     ToolbarItem(placement: .principal) {
@@ -498,7 +521,7 @@ struct ReaderHome: View {
                     ToolbarItem(placement: .topBarTrailing) {
                         if model.showingEntry {
                             Menu {
-                                Button("Search results") { model.showResults(); focusSearch() }
+                                Button("Search results") { model.showResults(); requestSearchFocus() }
                                 Button("Back to Main Page") { selectedTab = 0 }
                             } label: { Image(systemName: "line.3.horizontal") }.accessibilityLabel("Dictionary navigation")
                         }
@@ -517,7 +540,7 @@ struct ReaderHome: View {
         .toolbarBackground(.visible, for: .tabBar, .navigationBar)
         .tabItem { Label("Search", systemImage: "magnifyingglass") }.tag(1)
     }
-    private func focusSearch() { wantsSearchFocus = true; searchFocusRequest += 1 }
+    private func requestSearchFocus() { wantsSearchFocus = true; searchFocusRequest += 1 }
     private var libraryTab: some View {
         NavigationStack {
                 List {
@@ -617,7 +640,7 @@ struct ReaderHome: View {
                     Text("Exact word").tag(DictionarySearchMode.exact)
                 }.pickerStyle(.menu)
                 Spacer()
-                Button { focusSearch() } label: { Image(systemName: "keyboard") }.accessibilityLabel("Show search keyboard")
+                Button { requestSearchFocus() } label: { Image(systemName: "keyboard") }.accessibilityLabel("Show search keyboard")
             }.padding(.horizontal, 8)
         }.padding(.horizontal, 8).background(paper)
             .onChange(of: model.searchMode) { _, _ in model.typedSearch(model.word) }
