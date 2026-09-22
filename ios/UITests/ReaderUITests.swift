@@ -8,6 +8,9 @@ final class ReaderUITests: XCTestCase {
         app.tabBars.buttons["Search"].tap()
         let field = app.textFields["dictionarySearchField"]
         XCTAssertTrue(field.waitForExistence(timeout: 10))
+        let scope = app.buttons["searchScope_base:DEMO_A"]
+        XCTAssertTrue(scope.waitForExistence(timeout: 5))
+        scope.tap()
         field.typeText("みほん")
         let result = app.buttons["dictionaryResult_みほん"].firstMatch
         XCTAssertTrue(result.waitForExistence(timeout: 15), "Search must happen without tapping submit")
@@ -23,7 +26,7 @@ final class ReaderUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Demo English–Japanese"].waitForExistence(timeout: 5))
         let switchShot = XCTAttachment(screenshot: app.screenshot())
         switchShot.name = "Dictionary switcher"; switchShot.lifetime = .keepAlways; add(switchShot)
-        app.buttons["dictionaryResult_みほん"].lastMatch.tap()
+        app.buttons.matching(identifier: "dictionaryResult_みほん").element(boundBy: 1).tap()
         let entryShot = XCTAttachment(screenshot: app.screenshot())
         entryShot.name = "Entry with persistent tabs"; entryShot.lifetime = .keepAlways; add(entryShot)
         app.buttons["Back"].tap()

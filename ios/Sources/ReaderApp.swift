@@ -210,7 +210,8 @@ struct EntryVisit {
         searchGeneration += 1
         let generation = searchGeneration
         let root = hit.root
-        let query = word, matches = hits
+        let query = replacingCurrent ? (visits.last?.query ?? word) : word
+        let matches = replacingCurrent ? (visits.last?.matches ?? hits) : hits
         let wasEntry = showingEntry
         let enabled = dictionaries.filter { !disabledDictionaries.contains($0.id) }
         lookupBusy = true
@@ -649,7 +650,7 @@ struct ReaderHome: View {
         Button { model.searchScope = id; model.typedSearch(model.word) } label: {
             Text(name).font(.caption).padding(.horizontal, 10).padding(.vertical, 7)
                 .background(model.searchScope == id ? accent.opacity(0.18) : .clear, in: Capsule())
-        }.foregroundStyle(ink)
+        }.foregroundStyle(ink).accessibilityIdentifier("searchScope_" + id)
     }
     private func resultGroups(_ hits: [DictionaryHit], switching: Bool = false) -> some View {
         List {
