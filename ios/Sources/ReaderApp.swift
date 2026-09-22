@@ -527,7 +527,7 @@ struct ReaderHome: View {
 
     private var composeView: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: ReaderMetrics.stack) {
                 HStack(spacing: 10) {
                     PasteButton(payloadType: String.self) { strings in
                         guard !strings.isEmpty else { return }
