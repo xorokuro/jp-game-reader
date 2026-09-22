@@ -13,7 +13,7 @@ import WebKit
                 completed = true
                 continuation.resume(throwing: NSError(domain: "SelectionTest", code: 1, userInfo: [NSLocalizedDescriptionKey: "WebKit evaluation timed out"]))
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: timeout)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 30, execute: timeout)
             DictionaryPage.evaluateSelectionScript(script, in: view) { value, error in
                 guard !completed else { return }
                 completed = true; timeout.cancel()
@@ -87,10 +87,12 @@ import WebKit
             view.configuration.userContentController.removeScriptMessageHandler(forName: "readerSelection", contentWorld: DictionaryPage.selectionWorld)
             window.isHidden = true
         }
-        for _ in 0..<100 {
+        // A cold WebKit process on a hosted simulator can take over ten seconds.
+        for _ in 0..<600 {
             if !view.isLoading && view.url != nil { break }
             try await Task.sleep(nanoseconds: 100_000_000)
         }
+        XCTAssertFalse(view.isLoading, "Dictionary document must finish loading before selecting text")
         XCTAssertFalse(view.configuration.defaultWebpagePreferences.allowsContentJavaScript)
         let select = "const r=document.createRange(); const n=document.getElementById('passage').firstChild; r.setStart(n,0); r.setEnd(n,END); const s=window.getSelection(); s.removeAllRanges(); s.addRange(r);"
         _ = try await evaluate("(() => {" + select.replacingOccurrences(of: "END", with: "2") + "return true;})()", in: view)
