@@ -115,3 +115,11 @@ Run `python -m unittest -v test_profiles test_reader test_translation_backends` 
 chunked translation, missing-model and relative-path checks. Run
 `runtime\python.exe verify_bundle.py` in a personal bundle to verify every copied
 dictionary file and sample definitions/media. See [ROADMAP.md](ROADMAP.md).
+
+## Unified desktop update
+
+The desktop uses the newer Fortune Weave design and controls. See
+[UNIFIED-DESKTOP.md](UNIFIED-DESKTOP.md) for the current paste/editor workflow,
+A/D dictionary shortcuts, runtime OBS/game-window selection, and existing-library
+launcher behavior. This supersedes the earlier editable-block and OBS-only
+instructions above. The native iOS source is unchanged.

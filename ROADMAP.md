@@ -27,6 +27,14 @@ repositories only for genuinely different applications built from this foundatio
 - Neutral branding, portable launcher, and separate per-game database/crop/model settings.
 - Existing local OCR, review, journal, notes, local translation and dictionary reader.
 
+## Desktop merge delivered
+
+The Fortune Weave desktop design, shortcuts and OCR fixes now share one app with
+pasted reading and portable library/translation support. Input sources can switch
+at runtime between paste, a visible OBS projector, and a selected visible Windows
+window. Existing Fortune Weave libraries remain in place. Native iOS is unchanged.
+See UNIFIED-DESKTOP.md.
+
 ## Optional game capture improvements
 
 Add an authenticated, local OBS WebSocket capture adapter using

@@ -1,4 +1,4 @@
-﻿param([string]$ImagePath = '', [string]$ProcessName = 'obs64', [double]$CropTop = 0.55, [double]$CropHeight = 0.43)
+﻿param([string]$ImagePath = '', [string]$ProcessName = 'obs64', [double]$CropTop = 0.55, [double]$CropHeight = 0.43, [ValidateSet('obs','window')][string]$CaptureMode = 'obs', [long]$WindowHandle = 0, [int]$WindowProcessId = 0)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 Add-Type -AssemblyName System.Drawing
@@ -73,11 +73,20 @@ try {
     $capturePath=$tempPath
    }
    else {
-    $obsProcess = Get-Process -Name $ProcessName -ErrorAction SilentlyContinue | Select-Object -First 1
-    $game = $null
-    if ($obsProcess) { $game = [pscustomobject]@{MainWindowHandle=[GameWindow]::Projector($obsProcess.Id)} }
+    $game=$null
+    if ($CaptureMode -eq 'window') {
+     $owner=[uint32]0
+     [void][GameWindow]::GetWindowThreadProcessId([IntPtr]$WindowHandle,[ref]$owner)
+     if ($WindowHandle -and $WindowProcessId -gt 0 -and $owner -eq $WindowProcessId -and [GameWindow]::IsWindowVisible([IntPtr]$WindowHandle)) {
+      $game=[pscustomobject]@{MainWindowHandle=[IntPtr]$WindowHandle}
+     }
+    } else {
+     $obsProcess=Get-Process -Name $ProcessName -ErrorAction SilentlyContinue | Select-Object -First 1
+     if ($obsProcess) { $game=[pscustomobject]@{MainWindowHandle=[GameWindow]::Projector($obsProcess.Id)} }
+    }
     if (!$game -or !$game.MainWindowHandle -or [GameWindow]::IsIconic($game.MainWindowHandle)) {
-     @{status='Open an OBS windowed Projector (Preview or Source)';text=''} | ConvertTo-Json -Compress
+     $message=if ($CaptureMode -eq 'window') {'Open the selected game window, or choose it again if it restarted.'} else {'Open an OBS windowed Projector (Preview or Source)'}
+     @{status=$message;text=''} | ConvertTo-Json -Compress
      Start-Sleep -Milliseconds 1200
      continue
     }
@@ -90,7 +99,7 @@ try {
     if ($w -lt 100 -or $h -lt 100) { Start-Sleep -Milliseconds 1000; continue }
     $cropY=[int]($h*$CropTop); $cropH=[int]($h*$CropHeight)
     if (![GameWindow]::RegionVisible($game.MainWindowHandle,$point.X,($point.Y+$cropY),$w,$cropH)) {
-     @{status='Capture waiting: uncover the OBS Projector dialogue area';text=''} | ConvertTo-Json -Compress
+     @{status='Capture waiting: uncover the selected window dialogue area';text=''} | ConvertTo-Json -Compress
      Start-Sleep -Milliseconds 850
      continue
     }
@@ -107,8 +116,14 @@ try {
    # Keep subtitle glyphs at a reliable recognition size on high-resolution displays.
    $original=[System.Drawing.Bitmap]::FromFile($capturePath)
    try {
-    if ($original.Width -gt 1920) {
-     $scaled=[System.Drawing.Bitmap]::new($original,1920,[int]($original.Height*1920/$original.Width))
+    $limit=1920
+    if ($CropTop -eq 0 -and $CropHeight -eq 1) { $limit=[Windows.Media.Ocr.OcrEngine]::MaxImageDimension }
+    # Explicit doubles prevent PowerShell choosing integer Min and rounding 0.5 to zero.
+    $ratio=[Math]::Min(1.0,[Math]::Min([double]$limit/$original.Width,[double]$limit/$original.Height))
+    if ($ratio -lt 1) {
+     $scaledWidth=[Math]::Max(1,[int][Math]::Floor($original.Width*$ratio))
+     $scaledHeight=[Math]::Max(1,[int][Math]::Floor($original.Height*$ratio))
+     $scaled=[System.Drawing.Bitmap]::new($original,$scaledWidth,$scaledHeight)
     } else { $scaled=$null }
    } finally { $original.Dispose() }
    if ($scaled) {
@@ -125,7 +140,10 @@ try {
       # Full screens mix HUD numbers, tutorial text and controls at different sizes.
       # Preserve OCR text blocks: global size filtering loses small instructions,
       # and grouping the entire screen by baseline merges HUD into tutorial text.
-      $ordered=@($result.Lines | ForEach-Object { $_.Text })
+      # Windows OCR's enumeration is not reading order (some screens return
+      # the paragraphs bottom-to-top). Sort whole lines, without joining HUD
+      # labels to unrelated text or discarding smaller fonts.
+      $ordered=@($result.Lines | Sort-Object @{Expression={($_.Words | ForEach-Object {$_.BoundingRect.Y} | Measure-Object -Minimum).Minimum}}, @{Expression={($_.Words | ForEach-Object {$_.BoundingRect.X} | Measure-Object -Minimum).Minimum}} | ForEach-Object { $_.Text })
      } else {
      # OCR may split highlighted tips into separate lines. Reassemble words by baseline.
      $words=@($result.Lines | ForEach-Object { $_.Words } | Sort-Object { $_.BoundingRect.Height } -Descending)
@@ -137,9 +155,12 @@ try {
      $bands=[System.Collections.Generic.List[object]]::new()
      foreach ($word in $words) {
       $center=$word.BoundingRect.Y+$word.BoundingRect.Height
-      $band=$bands | Where-Object { [Math]::Abs($_.Center-$center) -lt [Math]::Max(6,$word.BoundingRect.Height*0.5) } | Select-Object -First 1
+      # Use the established row's font height too: a short punctuation mark
+      # or mis-sized OCR fragment must not create a separate reading row.
+      # Choose the nearest eligible baseline, not whichever was added first.
+      $band=$bands | Where-Object { [Math]::Abs($_.Center-$center) -lt [Math]::Max(6,[Math]::Max($_.Height,$word.BoundingRect.Height)*0.5) } | Sort-Object { [Math]::Abs($_.Center-$center) } | Select-Object -First 1
       if (!$band) {
-       $band=[pscustomobject]@{Center=$center;Words=[System.Collections.Generic.List[object]]::new()}
+       $band=[pscustomobject]@{Center=$center;Height=$word.BoundingRect.Height;Words=[System.Collections.Generic.List[object]]::new()}
        $bands.Add($band)
       }
       $band.Words.Add($word)

@@ -23,22 +23,19 @@ def profile_folder(name):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--profile', default='reading')
+    parser.add_argument('--profile', default=None)
     parser.add_argument('--obs', action='store_true', help='Enable optional OBS capture')
-    parser.add_argument('--port', type=int, default=18745)
+    parser.add_argument('--port', type=int, default=None)
     parser.add_argument('--no-browser', action='store_true')
     parser.add_argument('--no-capture', action='store_true')
     args = parser.parse_args()
+    legacy=args.profile is None and (ROOT/'saved_sentences'/'sentences.sqlite3').exists()
+    args.port=args.port or (18744 if legacy else 18745)
     if not 1024 <= args.port <= 65535:
         parser.error('Port must be between 1024 and 65535.')
-    name = args.profile
-    if name is None:
-        existing = sorted(p.name for p in (ROOT/'data').glob('*') if p.is_dir())
-        print('JP Game Reader — one shared reader, separate game journals')
-        print('Existing games: ' + (', '.join(existing) or '(none yet)'))
-        name = input('Game profile, e.g. fortune-weave or my-new-vn: ').strip()
+    name=args.profile or 'reading'
     try:
-        folder = profile_folder(name)
+        folder=ROOT/'saved_sentences' if legacy else profile_folder(name)
     except ValueError as error:
         parser.error(str(error))
     with socket.socket() as probe:
@@ -46,7 +43,7 @@ def main():
             try:
                 with urllib.request.urlopen(f'http://127.0.0.1:{args.port}/api/state', timeout=2) as response:
                     state=json.load(response)
-                if state.get('workspace')==str(folder.resolve()) and state.get('capture_enabled')==(args.obs and not args.no_capture):
+                if state.get('workspace')==str(folder.resolve()):
                     if not args.no_browser:webbrowser.open(f'http://127.0.0.1:{args.port}')
                     return 0
             except (OSError,ValueError):pass

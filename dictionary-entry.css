@@ -1,32 +1,41 @@
+/* ==========================================================================
+   Styles injected into the dictionary entry iframe. Publisher markup varies
+   wildly, so the overrides stay aggressive on purpose.
+   ========================================================================== */
 :root{color-scheme:dark}
 html,body{overscroll-behavior:contain;overflow-anchor:none}
-html,body{background:#192229!important;color:#e3eaf0!important}
-body{padding:18px;margin:0;font:18px/1.85 "Yu Gothic",sans-serif;overflow-wrap:anywhere}
-body *{color:inherit!important;background-color:transparent!important;border-color:#526571!important}
-body a,body a *{color:#82d5e6!important}
+html,body{background:#151d24!important;color:#e4ecf2!important}
+body{
+ padding:20px 22px;margin:0;
+ font:18px/1.9 "Yu Gothic UI","Yu Gothic","Noto Sans JP","Microsoft JhengHei",sans-serif;
+ overflow-wrap:anywhere;
+}
+body *{color:inherit!important;background-color:transparent!important;border-color:#2f3f4b!important}
+body a,body a *{color:#7fd4e8!important;text-decoration:none}
 body a:hover{text-decoration:underline}
-body .dictionary-source{font:14px sans-serif;color:#b5c7d1!important;border-bottom:1px solid #526571;padding-bottom:12px;margin-bottom:16px}
+body .dictionary-source{
+ font:12px/1.6 "Segoe UI",system-ui,sans-serif;
+ letter-spacing:.14em;text-transform:uppercase;
+ color:#93a8b6!important;
+ border-bottom:1px solid #2f3f4b;
+ padding-bottom:12px;margin-bottom:18px;
+}
 audio{color-scheme:dark;display:inline-block;width:185px;height:30px;vertical-align:middle;margin:4px}
-::selection{background:#345b6f!important;color:white!important}
-:is(#dictionary-dark-theme,body.mdict-entry){font:18px/1.85 "Yu Gothic","Microsoft JhengHei",sans-serif!important;letter-spacing:normal!important}
-:is(#dictionary-dark-theme,body.mdict-entry) *{font-family:inherit!important;font-size:inherit!important;letter-spacing:normal!important;color:inherit!important;background-color:transparent!important}
-:is(#dictionary-dark-theme,body.mdict-entry) a,:is(#dictionary-dark-theme,body.mdict-entry) a *{color:#82d5e6!important}
-:is(#dictionary-dark-theme,body.mdict-entry) b,:is(#dictionary-dark-theme,body.mdict-entry) strong{color:#a9dfcc!important}
-:is(#dictionary-dark-theme,body.mdict-entry) ruby rt,:is(#dictionary-dark-theme,body.mdict-entry) sup,:is(#dictionary-dark-theme,body.mdict-entry) sub{font-size:.7em!important}
-:is(#dictionary-dark-theme,body.mdict-entry) .dictionary-source{font-size:14px!important;color:#b5c7d1!important}
+::selection{background:#2f5d70!important;color:#fff!important}
+::-webkit-scrollbar{width:10px}
+::-webkit-scrollbar-thumb{background:#33444f;border-radius:99px;border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:#445a68;background-clip:content-box}
+::-webkit-scrollbar-track{background:transparent}
 
-/* Light preset. dictionary.js stamps data-mode on this document's root so the
-   embedded entry matches the reader instead of staying a dark rectangle. */
-html[data-mode=light]{color-scheme:light}
-html[data-mode=light],html[data-mode=light] body{background:#fffdf8!important;color:#1f272b!important}
-html[data-mode=light] body *{border-color:#ddd5c6!important}
-html[data-mode=light] body a,html[data-mode=light] body a *,
-html[data-mode=light] :is(#dictionary-dark-theme,body.mdict-entry) a,
-html[data-mode=light] :is(#dictionary-dark-theme,body.mdict-entry) a *{color:#0d6a80!important}
-html[data-mode=light] :is(#dictionary-dark-theme,body.mdict-entry) b,
-html[data-mode=light] :is(#dictionary-dark-theme,body.mdict-entry) strong{color:#0a6349!important}
-html[data-mode=light] body .dictionary-source,
-html[data-mode=light] :is(#dictionary-dark-theme,body.mdict-entry) .dictionary-source{
- color:#5f6b71!important;border-bottom-color:#ddd5c6}
-html[data-mode=light] ::selection{background:#ffe2a0!important;color:#1f272b!important}
-html[data-mode=light] audio{color-scheme:light}
+:is(#dictionary-dark-theme,body.mdict-entry){
+ font:18px/1.9 "Yu Gothic UI","Yu Gothic","Noto Sans JP","Microsoft JhengHei",sans-serif!important;
+ letter-spacing:normal!important;
+}
+:is(#dictionary-dark-theme,body.mdict-entry) *{
+ font-family:inherit!important;font-size:inherit!important;letter-spacing:normal!important;
+ color:inherit!important;background-color:transparent!important;
+}
+:is(#dictionary-dark-theme,body.mdict-entry) a,:is(#dictionary-dark-theme,body.mdict-entry) a *{color:#7fd4e8!important}
+:is(#dictionary-dark-theme,body.mdict-entry) b,:is(#dictionary-dark-theme,body.mdict-entry) strong{color:#9fe3cb!important}
+:is(#dictionary-dark-theme,body.mdict-entry) ruby rt,:is(#dictionary-dark-theme,body.mdict-entry) sup,:is(#dictionary-dark-theme,body.mdict-entry) sub{font-size:.7em!important}
+:is(#dictionary-dark-theme,body.mdict-entry) .dictionary-source{font-size:12px!important;color:#93a8b6!important}

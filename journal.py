@@ -87,12 +87,13 @@ class Journal:
         saved=self.record(edited.strip(),kind='manual',raw=r['text']) if keep and edited is not None else self.record(correction['text'],source_id=correction['id'],kind='manual',raw=r['text']) if correction else self.record(r['text'],kind='manual' if keep else 'ocr',discard_new=not keep)
         with self.connect() as db:db.execute('DELETE FROM pending_ocr WHERE id=?',(token,))
         return saved if keep else None
-    def record(self,text,game='obs64',source_id=None,confidence=0,kind='ocr',raw=None,discard_new=False):
+    def record(self,text,game='obs64',source_id=None,confidence=0,kind='ocr',raw=None,discard_new=False,save=None):
         if not norm(text):raise ValueError('Enter a sentence first.')
-        if not self.save_text:
+        if not (self.save_text if save is None else save):
             self.temporary_id-=1
             row=dict(id=self.temporary_id,japanese=text,original=raw or text,kind=kind,game=game,source_id=source_id,confidence=confidence,english='',traditional_chinese='',note='',starred=0,studied=0,encounters=1,first_seen='',last_seen='',temporary=True)
             self.temporary[row['id']]=row
+            if len(self.temporary)>100:self.temporary.pop(next(iter(self.temporary)))
             return row
         stamp=time.strftime('%Y-%m-%d %H:%M:%S');key=sentence_key(text)
         with self.connect() as db:
@@ -294,9 +295,9 @@ class Recorder:
         if not identity or not re.search('[\u3040-\u30ff\u3400-\u9fff]',text):return None
         if identity!=self.candidate:self.ignored=False
         self.repeats=self.repeats+1 if identity==self.candidate else 1;self.candidate=identity
-        # Unmatched text is a review proposal, not a saved sentence: show it promptly.
+        # Manual retries bypass duplicate suppression, never the stability check.
         required=3 if not match else 2
-        if not force and (self.repeats<required or identity==self.last):return None
+        if self.repeats<required or (not force and identity==self.last):return None
         result=self.journal.record(text,game,match['id'] if match else None,match['confidence'] if match else 0,'corpus' if match else 'ocr',raw)
         self.ignored=result is None
         self.last=identity
@@ -312,6 +313,8 @@ def main():
     preferences_path=Path(args.database).parent/'preferences.json'
     config_path=Path(args.database).parent/'settings.json';settings={'process':'obs64','crop_top':.55,'crop_height':.43}
     if config_path.exists():settings.update(json.loads(config_path.read_text(encoding='utf-8')))
+    settings.setdefault('capture_mode','obs' if not args.no_capture else 'paste')
+    if args.no_capture:settings['capture_mode']='paste'
     corpus=[] # This game has no supplied extracted script.
     matcher=Matcher(corpus);recorder=Recorder(journal,matcher)
     state={'status':'Starting recorder','paused':True,'raw':'','last':journal.get(journal.recent()[0]['id']) if journal.recent() else None,'version':0,'retry':{'pending':False,'message':''}};lock=threading.RLock();stop=threading.Event();restart=threading.Event();worker=[None]
@@ -326,12 +329,13 @@ def main():
                 cfg=dict(settings)
                 full_frame=bool(state['retry']['pending'] and state['retry'].get('full_frame'))
                 if full_frame:cfg.update(crop_top=0,crop_height=1)
-                should_capture=not state['paused'] or state['retry']['pending']
-                if not should_capture:state['status']='手動辨識：等待按下辨識按鈕。'
+                should_capture=settings['capture_mode']!='paste' and (not state['paused'] or state['retry']['pending'])
+                if not should_capture:state['status']='Paste Japanese to read and look up words.' if settings['capture_mode']=='paste' else '手動辨識：等待按下辨識按鈕。'
             if not should_capture:
                 restart.wait(.5)
                 continue
             cmd=['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',str(HERE/'ocr.ps1'),'-ProcessName',cfg['process'],'-CropTop',str(cfg['crop_top']),'-CropHeight',str(cfg['crop_height'])]
+            cmd+=['-CaptureMode',cfg['capture_mode'],'-WindowHandle',str(cfg.get('window_handle',0)),'-WindowProcessId',str(cfg.get('window_pid',0))]
             try:
                 proc=subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,encoding='utf-8',errors='replace',creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0));worker[0]=proc
                 for line in proc.stdout:
@@ -341,6 +345,7 @@ def main():
                         with lock:state['status']='OCR startup/error: '+line.strip()[:250]
                         continue
                     with lock:
+                        if restart.is_set():break
                         state.update(status=sample.get('status','Reading'),raw=sample.get('text',''))
                         retry=state['retry']
                         forced=retry['pending']
@@ -393,9 +398,12 @@ def main():
                         recent=journal.recent();current=journal.get(recent[0]['id']) if recent else None
                     pending=journal.pending()
                     for item in pending['rows']:item['suggestions']=matcher.suggest(item['text'])
-                    return self.send({**state,'workspace':str(Path(args.database).parent.resolve()),'save_text':journal.save_text,'capture_enabled':not args.no_capture,'last':current,'settings':settings,'translation_fields':True,'pending_ocr':pending,'recent':journal.recent(),'exports':{'pending':journal.export_pending.is_set(),'updated_at':journal.exported_at,'error':journal.export_error}})
+                    return self.send({**state,'workspace':str(Path(args.database).parent.resolve()),'save_text':journal.save_text,'capture_enabled':settings['capture_mode']!='paste','last':current,'settings':settings,'translation_fields':True,'pending_ocr':pending,'recent':journal.recent(),'exports':{'pending':journal.export_pending.is_set(),'updated_at':journal.exported_at,'error':journal.export_error}})
             query=parse_qs(urlparse(self.path).query)
             try:
+                if p=='/api/capture-sources':
+                    import capture_sources
+                    return self.send({'windows':capture_sources.windows()})
                 if p=='/api/translation-options':
                     import translation_backends
                     return self.send(translation_backends.catalog())
@@ -444,6 +452,17 @@ def main():
                     import preferences
                     with lock:preferences.save(preferences_path,body)
                     return self.send({'ok':True})
+                elif self.path=='/api/capture-source':
+                    import capture_sources
+                    selected=capture_sources.select(body)
+                    with lock:
+                        settings.update(selected)
+                        config_path.write_text(json.dumps(settings,indent=2),encoding='utf-8')
+                        state['paused']=True;state['retry']={'pending':False,'message':''};state['raw']=''
+                        recorder.candidate='';recorder.last='';recorder.repeats=0
+                        restart.set()
+                        if worker[0] and worker[0].poll() is None:worker[0].terminate()
+                    return self.send({'ok':True,'settings':settings})
                 elif self.path=='/api/save-text':
                     if not isinstance(body.get('enabled'),bool):raise ValueError('Expected enabled true or false.')
                     with lock:journal.save_text=body['enabled']
@@ -487,6 +506,7 @@ def main():
                     return self.send(local_dictionary.search(str(body.get('word','')),body.get('codes')))
                 elif self.path=='/api/retry':
                     with lock:
+                        if settings['capture_mode']=='paste':raise ValueError('Choose OBS or a game window before recognizing.')
                         if not state['retry']['pending']:
                             full_frame=body.get('full_frame') is True
                             state['retry']={'pending':True,'full_frame':full_frame,'deadline':time.monotonic()+25,'message':('正在辨識整個 OBS 遊戲畫面；請保持投影視窗完整可見。完成後自動恢復原本範圍。' if full_frame else '正在重新擷取遊戲畫面；若讀不到，請切回遊戲並停留幾秒。'),'text':''}
@@ -496,6 +516,7 @@ def main():
                     return self.send({'ok':True,'retry':dict(state['retry'])})
                 elif self.path=='/api/pause':
                     with lock:
+                        if settings['capture_mode']=='paste' and not body['paused']:raise ValueError('Choose a capture source first.')
                         state['paused']=bool(body['paused']);recorder.candidate='';recorder.repeats=0
                         if state['paused']:state['retry']['pending']=False
                         restart.set()
@@ -503,7 +524,12 @@ def main():
                 elif self.path=='/api/add':
                     text=body.get('japanese')
                     if not isinstance(text,str) or not text.strip() or len(text)>12000:raise ValueError('Paste between 1 and 12,000 characters.')
-                    with lock:state['last']=journal.record(text.strip(),settings['process'],kind='manual');state['version']+=1;row=state['last']
+                    if 'save' in body and not isinstance(body['save'],bool):raise ValueError('Expected save true or false.')
+                    with lock:
+                        previous=journal.get(body['temporary_id']) if type(body.get('temporary_id')) is int and body['temporary_id']<0 else None
+                        if previous and previous['japanese']!=text:raise ValueError('Temporary text changed; open it again before saving.')
+                        state['last']=journal.record(text.strip(),previous['game'] if previous else settings['process'],kind=previous['kind'] if previous else 'manual',raw=previous['original'] if previous else text,save=body.get('save'))
+                        state['version']+=1;row=state['last']
                     return self.send({'ok':True,'row':row})
                 elif self.path=='/api/decide-ocr':
                     if body.get('choice') not in ('keep','ignore','correct'):raise ValueError('Invalid choice')
@@ -580,8 +606,7 @@ def main():
     state['translation']['provider']=translation_backends.selected().label
     state['translation']['status']='Ready: '+translation_backends.selected().label
     local_translator=local_translate.Translator(journal,stop,state,lock)
-    if not args.no_capture:threading.Thread(target=capture,daemon=True).start()
-    else:state['status']='Reading mode · Paste Japanese text to read and look up words'
+    threading.Thread(target=capture,daemon=True).start()
     if not args.no_browser:webbrowser.open(origin)
     try:server.serve_forever()
     finally:
