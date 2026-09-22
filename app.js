@@ -414,7 +414,7 @@ poll();
  try{const value=JSON.parse(localStorage.getItem(storageKey));if(value&&Array.isArray(value.rows))batch=value;}catch{}
  batch.removedIds=Array.isArray(batch.removedIds)?batch.removedIds:[];
  function chosen(){return batch.rows.filter(r=>!r.excluded).map(r=>({...r,japanese:r.draft??r.japanese}))}
- const panel=E('section');panel.id='obs-batch';panel.className='current';const title=E('h2','整段收集 · 一次送出多句'),info=E('p'),bar=E('div'),list=E('div'),status=E('p'),start=E('button','開始收集（含目前這句）'),stop=E('button','停止收集'),clear=E('button','清空這一批'),paste=E('button','📋 貼上並儲存整批翻譯');bar.className='toolbar';
+ const panel=E('details');panel.id='obs-batch';panel.className='current';const title=E('summary','整段收集 · 一次送出多句'),info=E('p'),bar=E('div'),list=E('div'),status=E('p'),start=E('button','開始收集（含目前這句）'),stop=E('button','停止收集'),clear=E('button','清空這一批'),paste=E('button','📋 貼上並儲存整批翻譯');bar.className='toolbar';
  const details=E('div');details.append(E('h3','這一批的句子（拖曳 ⠿ 排序；劃掉的不送出）'),list);list.className='batch-lines';
  const fallback=E('details'),input=E('textarea'),save=E('button','儲存整批 JSON');input.placeholder='貼上 ChatGPT 回覆的整批 JSON';input.setAttribute('aria-label','整批翻譯 JSON');fallback.append(E('summary','無法讀剪貼簿？手動貼上'),input,save);
  const send=sendButton('整批日文＋學習 prompt',()=>batch.active?'':prepareBatchPrompt()),copyBatch=E('button','複製整批學習 prompt');

@@ -24,6 +24,16 @@
 
 <main class="shell">
 
+ <section class="panel" aria-label="Quick dictionary search">
+  <h2>Dictionary · 快速查詞</h2>
+  <div class="toolbar">
+   <input id="lookup-word" placeholder="Select or type a Japanese word">
+   <button id="lookup-online" hidden>Look up online</button>
+   <button id="lookup-local" class="primary">Search purchased dictionaries</button>
+  </div>
+  <p id="lookup-state" role="status"></p>
+ </section>
+
  <section class="panel panel-status" aria-label="Recorder status">
   <div id="status" role="status">Connecting to your journal…</div>
   <p id="retry-message" role="status"></p>
@@ -65,12 +75,6 @@
   <label class="switch"><input type="checkbox" id="auto-translation" checked> Auto · Selected engine · English + 繁體中文</label>
   <p id="translation-state" role="status">Connecting…</p>
   <p class="muted">Translation is optional. Choose LM Studio or an installed offline Argos package below. Auto fills missing translations; the manual button translates the displayed sentence again. Text stays temporary until you save it; saved passages remain local. For dictionary lookup, select a Japanese word in the reader, then use the buttons below.</p>
-  <div class="toolbar">
-   <input id="lookup-word" placeholder="Select or type a Japanese word">
-   <button id="lookup-online" hidden>Look up online</button>
-   <button id="lookup-local" class="primary">Search purchased dictionaries</button>
-  </div>
-  <p id="lookup-state" role="status"></p>
  </section>
 
  <details id="history" class="panel">
