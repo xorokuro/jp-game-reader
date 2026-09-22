@@ -138,3 +138,27 @@ Validation for this update: source syntax can be checked on Windows, but Xcode
 build, simulator tests, and physical iPhone checks must run on macOS/device before
 calling this update a verified installable release. The existing build workflow
 runs the expanded synthetic engine, selection, palette, and interface tests.
+
+## Version 1.4 — Search flow from the reference recording
+
+Search updates while typing (including Japanese IME composition), with a short
+180 ms delay and stale-result cancellation. The keyboard stays open until an
+entry is opened or a search is explicitly submitted. Returning to Search selects
+the current query. Starts with / Exact word and All / individual dictionary
+filters sit around the grouped results; previews retain kanji from entry text.
+
+Definitions now stay inside the Search tab, with Read/Search/Library always
+available. Tap the entry title to switch dictionaries; the current result has a
+checkmark. Tapped entry links open an exact match, preferring the current dictionary.
+Back retraces opened words, restores their scroll offsets, then returns to search.
+Switching dictionaries replaces the current visit rather than adding a duplicate
+history step. History is session-only and bounded to 30 entries.
+
+The earlier independent auto-search choices remain: highlighted text opens grouped
+results, while explicit dictionary links open definitions. No dictionary artwork or
+proprietary categories were copied; filters use the actual installed dictionaries.
+
+The WebKit palette uses an isolated, app-owned document-end script, avoiding the
+Swift WebKit evaluation overlay that failed to load in the previous simulator run.
+A synthetic Japanese dictionary fixture exists only in DEBUG builds, opt-in via
+--ui-dictionary-fixture, in a temporary folder separate from user documents.

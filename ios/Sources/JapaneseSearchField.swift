@@ -23,6 +23,7 @@ struct JapaneseSearchField: UIViewRepresentable {
     let focusRequest: Int
     let active: Bool
     let ink: UIColor
+    var changed: ((String) -> Void)? = nil
     let submit: () -> Void
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeUIView(context: Context) -> JapaneseTextField {
@@ -64,7 +65,11 @@ struct JapaneseSearchField: UIViewRepresentable {
         var autoFocused = false
         var lastRequest = -1
         init(_ parent: JapaneseSearchField) { self.parent = parent }
-        @objc func changed(_ field: UITextField) { parent.text = field.text ?? "" }
+        @objc func changed(_ field: UITextField) {
+            let query = field.text ?? ""
+            parent.text = query
+            parent.changed?(query)
+        }
         func textFieldShouldReturn(_ textField: UITextField) -> Bool {
             guard textField.markedTextRange == nil else { return false }
             parent.submit()

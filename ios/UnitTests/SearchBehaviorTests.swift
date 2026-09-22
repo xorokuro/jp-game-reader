@@ -32,6 +32,51 @@ import SQLite3
             model.queue.async { DispatchQueue.main.async { continuation.resume() } }
         }
     }
+    func testExactModeLiveTypingAndClearCancelOldResults() async throws {
+        let (model, root, suite) = try fixture()
+        defer { try? FileManager.default.removeItem(at: root); UserDefaults.standard.removePersistentDomain(forName: suite) }
+        try await settle(model)
+        model.searchMode = .exact
+        model.word = "原因"; model.search(dismissKeyboard: false)
+        try await settle(model)
+        XCTAssertEqual(model.hits.map(\.word), ["原因"])
+        model.searchMode = .prefix
+        model.typedSearch("原因")
+        model.typedSearch("")
+        try await Task.sleep(nanoseconds: 250_000_000)
+        try await settle(model)
+        XCTAssertTrue(model.hits.isEmpty)
+        model.typedSearch("原")
+        try await Task.sleep(nanoseconds: 250_000_000)
+        try await settle(model)
+        XCTAssertEqual(model.hits.map(\.word), ["原因", "原因論"])
+        XCTAssertFalse(model.showingEntry)
+    }
+    func testEntryLinkBackAndDictionarySwitchHistory() async throws {
+        let (model, root, suite) = try fixture()
+        defer { try? FileManager.default.removeItem(at: root); UserDefaults.standard.removePersistentDomain(forName: suite) }
+        try await settle(model)
+        model.word = "原因"; model.search(dismissKeyboard: false)
+        try await settle(model)
+        let first = try XCTUnwrap(model.hits.first)
+        model.open(first)
+        try await settle(model)
+        let originalID = model.entryID
+        model.entryOffsets[originalID] = CGPoint(x: 0, y: 120)
+        XCTAssertEqual(model.visits.count, 1)
+        model.followEntryLink("原因論")
+        try await settle(model); try await settle(model)
+        XCTAssertEqual(model.entryTitle, "原因論")
+        XCTAssertEqual(model.visits.count, 2)
+        model.open(first, replacingCurrent: true)
+        try await settle(model)
+        XCTAssertEqual(model.visits.count, 2, "Changing dictionaries replaces the current visit")
+        model.backToPreviousEntry()
+        XCTAssertEqual(model.entryID, originalID)
+        XCTAssertEqual(model.entryOffsets[originalID]?.y, 120)
+        model.backToPreviousEntry()
+        XCTAssertFalse(model.showingEntry)
+    }
     func testIndependentDefaultsPersistenceAndManualSearch() async throws {
         let (model, root, suite) = try fixture()
         defer { try? FileManager.default.removeItem(at: root); UserDefaults.standard.removePersistentDomain(forName: suite) }

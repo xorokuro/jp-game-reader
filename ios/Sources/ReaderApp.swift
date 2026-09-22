@@ -16,6 +16,14 @@ struct InstalledDictionary: Identifiable {
     let root: URL
 }
 
+struct EntryVisit {
+    let id = UUID()
+    let hit: DictionaryHit
+    let html: String
+    let query: String
+    let matches: [DictionaryHit]
+}
+
 @MainActor final class ReaderModel: ObservableObject {
     @Published var text = ""
     @Published var word = ""
@@ -37,6 +45,47 @@ struct InstalledDictionary: Identifiable {
     @Published var entryCode = ""
     @Published var showingEntry = false
     @Published var showingLookup = false
+    @Published var lookupNavigation = UUID()
+    @Published var entryTitle = ""
+    @Published var entryDictionary = ""
+    @Published var entryHitIdentity = ""
+    @Published var entryMatches: [DictionaryHit] = []
+    @Published var searchMode: DictionarySearchMode = .prefix
+    @Published var searchScope = ""
+    @Published private(set) var visits: [EntryVisit] = []
+    var entryOffsets: [UUID: CGPoint] = [:]
+    var readerOffset: CGPoint = .zero
+    private var liveSearch: DispatchWorkItem?
+    func typedSearch(_ query: String) {
+        cancelPendingSearch()
+        word = query
+        hits = []
+        status = ""
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let pending = DispatchWorkItem { [weak self] in self?.search(dismissKeyboard: false) }
+        liveSearch = pending
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18, execute: pending)
+    }
+    func followEntryLink(_ query: String) {
+        word = query
+        search(dismissKeyboard: true, navigate: true, openBestMatch: true)
+    }
+    private func display(_ visit: EntryVisit) {
+        entryHTML = visit.html; entryRoot = visit.hit.root; entryCode = visit.hit.code
+        entryTitle = visit.hit.word; entryDictionary = visit.hit.dictionary; entryHitIdentity = visit.hit.identity
+        entryID = visit.id; entryMatches = visit.matches
+        word = visit.query; hits = visit.matches; dictionarySelection = ""
+        showingEntry = true; showingLookup = true; status = ""
+        lookupNavigation = UUID()
+    }
+    func backToPreviousEntry() {
+        cancelPendingSearch()
+        if visits.count > 1 {
+            let removed = visits.removeLast(); entryOffsets.removeValue(forKey: removed.id)
+            if let previous = visits.last { display(previous) }
+        } else { showingEntry = false; showingLookup = false }
+    }
+    func showResults() { cancelPendingSearch(); showingEntry = false; showingLookup = false }
     @Published var readerSelection = ""
     @Published var dictionarySelection = ""
     @Published var readerAutoSearch = true {
@@ -45,7 +94,7 @@ struct InstalledDictionary: Identifiable {
     @Published var dictionaryAutoSearch = true {
         didSet { preferences.set(dictionaryAutoSearch, forKey: "dictionaryAutoSearch"); cancelPendingSearch() }
     }
-    func cancelPendingSearch() { searchGeneration += 1; lookupBusy = false }
+    func cancelPendingSearch() { liveSearch?.cancel(); liveSearch = nil; searchGeneration += 1; lookupBusy = false }
     func select(_ text: String, inDictionary: Bool) {
         if inDictionary { dictionarySelection = text } else { readerSelection = text }
         cancelPendingSearch()
@@ -122,17 +171,20 @@ struct InstalledDictionary: Identifiable {
         word = selected
         search(dismissKeyboard: false)
     }
-    func search(dismissKeyboard: Bool = true, navigate: Bool = false, onlyIfMatched: Bool = false) {
+    func search(dismissKeyboard: Bool = true, navigate: Bool = false, onlyIfMatched: Bool = false, openBestMatch: Bool = false) {
         if dismissKeyboard { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
+        liveSearch?.cancel(); liveSearch = nil
         searchGeneration += 1
         let generation = searchGeneration, query = word
-        let selected = dictionaries.filter { !disabledDictionaries.contains($0.id) }
+        let preferredRoot = entryRoot, preferredCode = entryCode
+        let mode: DictionarySearchMode = openBestMatch ? .exact : (navigate ? .prefix : searchMode)
+        let selected = dictionaries.filter { !disabledDictionaries.contains($0.id) && (navigate || searchScope.isEmpty || $0.id == searchScope) }
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { hits = []; lookupBusy = false; status = ""; return }
         lookupBusy = true
         queue.async {
             let result = Result { () -> [DictionaryHit] in
                 guard !selected.isEmpty else { throw ReaderError("Enable a dictionary in Library first, or add the dictionaries folder.") }
-                return try selected.flatMap { try DictionaryStore(root: $0.root).search(query, codes: [$0.code]) }
+                return try selected.flatMap { try DictionaryStore(root: $0.root).search(query, codes: [$0.code], mode: mode) }
             }
             DispatchQueue.main.async {
                 guard generation == self.searchGeneration else { return }
@@ -141,18 +193,24 @@ struct InstalledDictionary: Identifiable {
                 case .success(let hits):
                     self.hits = hits
                     self.status = hits.isEmpty ? "No match. Try the dictionary form of the word." : ""
-                    if navigate && (!onlyIfMatched || !hits.isEmpty) {
-                        self.showingEntry = false; self.showingLookup = true
+                    if openBestMatch, let hit = hits.first(where: { $0.root == preferredRoot && $0.code == preferredCode }) ?? hits.first {
+                        self.open(hit)
+                    } else if navigate && (!onlyIfMatched || !hits.isEmpty) {
+                        self.showingEntry = false; self.showingLookup = true; self.lookupNavigation = UUID()
                     }
                 case .failure(let error): self.hits = []; self.status = error.localizedDescription
                 }
             }
         }
     }
-    func open(_ hit: DictionaryHit) {
+    func open(_ hit: DictionaryHit, replacingCurrent: Bool = false) {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        liveSearch?.cancel(); liveSearch = nil
         searchGeneration += 1
         let generation = searchGeneration
         let root = hit.root
+        let query = word, matches = hits
+        let wasEntry = showingEntry
         lookupBusy = true
         queue.async {
             let result = Result { () -> String in
@@ -163,7 +221,16 @@ struct InstalledDictionary: Identifiable {
                 guard generation == self.searchGeneration else { return }
                 self.lookupBusy = false
                 switch result {
-                case .success(let html): self.entryHTML = html; self.entryCode = hit.code; self.entryRoot = root; self.entryID = UUID(); self.showingEntry = true; self.showingLookup = true; self.dictionarySelection = ""
+                case .success(let html):
+                    if replacingCurrent, !self.visits.isEmpty {
+                        let removed = self.visits.removeLast(); self.entryOffsets.removeValue(forKey: removed.id)
+                    } else if !wasEntry && !self.showingLookup {
+                        self.visits = []; self.entryOffsets = [:]
+                    }
+                    let visit = EntryVisit(hit: hit, html: html, query: query, matches: matches)
+                    self.visits.append(visit)
+                    if self.visits.count > 30 { let removed = self.visits.removeFirst(); self.entryOffsets.removeValue(forKey: removed.id) }
+                    self.display(visit)
                 case .failure(let error): self.status = error.localizedDescription
                 }
             }
@@ -246,7 +313,16 @@ struct InstalledDictionary: Identifiable {
 }
 
 @main struct JapaneseReaderApp: App {
-    @StateObject private var model = ReaderModel()
+    @StateObject private var model: ReaderModel
+    init() {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--ui-dictionary-fixture") {
+            _model = StateObject(wrappedValue: ReaderModel(documents: UITestFixture.documents()))
+        } else { _model = StateObject(wrappedValue: ReaderModel()) }
+        #else
+        _model = StateObject(wrappedValue: ReaderModel())
+        #endif
+    }
     var body: some Scene { WindowGroup { ReaderHome().environmentObject(model).tint(Color(red: 0.12, green: 0.48, blue: 0.45)) } }
 }
 
@@ -257,6 +333,8 @@ struct ReaderHome: View {
     @State private var selectedTab = 0
     @State private var editing = true
     @State private var searchFocusRequest = 0
+    @State private var wantsSearchFocus = false
+    @State private var switchingDictionary = false
     @State private var librarySearch = ""
     @State private var deleteAll = false
     @FocusState private var passageFocused: Bool
@@ -291,59 +369,20 @@ struct ReaderHome: View {
         .preferredColorScheme(customPaper ? (appDark ? .dark : .light) : nil)
         .background(paper.ignoresSafeArea())
         .onChange(of: selectedTab) { _, tab in
-            model.cancelPendingSearch()
-            if tab == 1 { searchFocusRequest += 1 }
-            else { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
+            if tab == 1 {
+                wantsSearchFocus = !model.showingLookup
+                if wantsSearchFocus { model.showResults(); searchFocusRequest += 1 }
+            } else {
+                wantsSearchFocus = false; model.closeLookup()
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
         }
+        .onChange(of: model.lookupNavigation) { _, _ in wantsSearchFocus = false; selectedTab = 1 }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.folder]) { result in
             switch result {
             case .success(let folder): model.importFolder(folder)
             case .failure(let error): model.status = error.localizedDescription
             }
-        }
-        .fullScreenCover(isPresented: $model.showingLookup) {
-            NavigationStack {
-                ZStack {
-                    if !model.entryHTML.isEmpty {
-                        DictionaryPage(html: model.entryHTML, root: model.entryRoot ?? model.dictionaryRoot, code: model.entryCode,
-                                       paperRGB: customPaper ? paperRGB : nil,
-                                       followLink: { word in model.word = word; model.search(navigate: true) }) { word in
-                            guard model.showingEntry else { return }
-                            model.select(word, inDictionary: true)
-                        }.id(model.entryID)
-                            .opacity(model.showingEntry ? 1 : 0)
-                            .allowsHitTesting(model.showingEntry)
-                            .accessibilityHidden(!model.showingEntry)
-                    }
-                    if !model.showingEntry { lookup(focusSearch: false).background(paper) }
-                }
-                .safeAreaInset(edge: .bottom) {
-                    if model.showingEntry {
-                        VStack(spacing: 6) {
-                            Button("Search selected text") { model.searchSelected(inDictionary: true) }.disabled(model.dictionarySelection.isEmpty)
-                            if model.lookupBusy { ProgressView() }
-                            if !model.status.isEmpty { Text(model.status).font(.caption) }
-                        }.padding(8).frame(maxWidth: .infinity).background(paper)
-                    } else if !model.status.isEmpty { Text(model.status).font(.caption).padding().background(paper) }
-                }
-                .background(paper)
-                .navigationTitle(model.showingEntry ? "Dictionary entry" : model.word)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("Back to Main Page") { model.closeLookup(); selectedTab = 0 }
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button(model.showingEntry ? "Results" : "Back") {
-                            if model.showingEntry { model.cancelPendingSearch(); model.showingEntry = false }
-                            else { model.closeLookup() }
-                        }
-                    }
-                }
-                .toolbarBackground(paper, for: .navigationBar)
-                .toolbarBackground(.visible, for: .navigationBar)
-            }.tint(accent).foregroundStyle(ink)
-                .preferredColorScheme(customPaper ? (appDark ? .dark : .light) : nil)
         }
     }
     private var readerTab: some View {
@@ -355,7 +394,7 @@ struct ReaderHome: View {
                     HStack {
                         PasteButton(payloadType: String.self) { strings in
                             guard !strings.isEmpty else { return }
-                            model.text = strings.joined(separator: "\n")
+                            model.text = strings.joined(separator: "\n"); model.readerOffset = .zero
                             model.status = ""
                             editing = true
                             passageFocused = false
@@ -383,7 +422,7 @@ struct ReaderHome: View {
                 }.scrollDismissesKeyboard(.interactively)
                 } else {
                     Toggle("Auto-search selected words", isOn: $model.readerAutoSearch).padding(.horizontal).accessibilityIdentifier("readerAutoSearch")
-                    SelectableJapanese(text: model.text, ink: UIColor(ink), paper: UIColor(paper)) { word in
+                    SelectableJapanese(text: model.text, ink: UIColor(ink), paper: UIColor(paper), initialOffset: model.readerOffset, saveOffset: { model.readerOffset = $0 }) { word in
                         guard !model.showingLookup, selectedTab == 0 else { return }
                         model.select(word, inDictionary: false)
                     }.frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -421,15 +460,64 @@ struct ReaderHome: View {
     }
     private var searchTab: some View {
         NavigationStack {
-                VStack { lookup(focusSearch: true); if !model.status.isEmpty { Text(model.status).font(.footnote).padding() } }
-                    .background(paper)
-                    .navigationTitle("Dictionary")
-                    .toolbar { ToolbarItem(placement: .topBarLeading) { Button("Back to Main Page") { selectedTab = 0 } } }
-            }
-            .toolbarBackground(paper, for: .tabBar, .navigationBar)
-            .toolbarBackground(.visible, for: .tabBar, .navigationBar)
-            .tabItem { Label("Search", systemImage: "magnifyingglass") }.tag(1)
+            VStack(spacing: 0) {
+                if model.showingEntry {
+                    let visitID = model.entryID
+                    DictionaryPage(html: model.entryHTML, root: model.entryRoot ?? model.dictionaryRoot, code: model.entryCode,
+                                   paperRGB: customPaper ? paperRGB : nil,
+                                   initialOffset: model.entryOffsets[visitID] ?? .zero,
+                                   saveOffset: { model.entryOffsets[visitID] = $0 },
+                                   followLink: { model.followEntryLink($0) }) { word in
+                        guard selectedTab == 1, model.showingEntry else { return }
+                        model.select(word, inDictionary: true)
+                    }.id(visitID.uuidString + (customPaper ? String(paperRGB) : "system"))
+                    if !model.dictionarySelection.isEmpty {
+                        Button("Search selected text") { model.searchSelected(inDictionary: true) }.padding(6)
+                    }
+                    if model.lookupBusy { ProgressView() }
+                } else { lookup(focusSearch: wantsSearchFocus) }
+                if !model.status.isEmpty { Text(model.status).font(.caption).padding(.horizontal, 8) }
+            }.background(paper)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        if model.showingEntry {
+                            Button { model.backToPreviousEntry(); if !model.showingEntry { focusSearch() } } label: { Image(systemName: "chevron.left") }.accessibilityLabel("Back")
+                        } else { Button("Back to Main Page") { selectedTab = 0 } }
+                    }
+                    ToolbarItem(placement: .principal) {
+                        if model.showingEntry {
+                            Button { switchingDictionary = true } label: {
+                                VStack(spacing: 1) {
+                                    Text(model.entryDictionary).font(.caption2).lineLimit(1)
+                                    HStack { Text(model.entryTitle).lineLimit(1); Image(systemName: "chevron.down").font(.caption) }
+                                }
+                            }.accessibilityIdentifier("switchDictionary")
+                        }
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        if model.showingEntry {
+                            Menu {
+                                Button("Search results") { model.showResults(); focusSearch() }
+                                Button("Back to Main Page") { selectedTab = 0 }
+                            } label: { Image(systemName: "line.3.horizontal") }.accessibilityLabel("Dictionary navigation")
+                        }
+                    }
+                }
+                .sheet(isPresented: $switchingDictionary) {
+                    NavigationStack {
+                        resultGroups(model.entryMatches, switching: true)
+                            .navigationTitle(model.entryTitle).navigationBarTitleDisplayMode(.inline)
+                            .toolbar { Button("Done") { switchingDictionary = false } }
+                            .background(paper)
+                    }.presentationDetents([.medium, .large])
+                }
+        }
+        .toolbarBackground(paper, for: .tabBar, .navigationBar)
+        .toolbarBackground(.visible, for: .tabBar, .navigationBar)
+        .tabItem { Label("Search", systemImage: "magnifyingglass") }.tag(1)
     }
+    private func focusSearch() { wantsSearchFocus = true; searchFocusRequest += 1 }
     private var libraryTab: some View {
         NavigationStack {
                 List {
@@ -442,7 +530,7 @@ struct ReaderHome: View {
                         }
                         ForEach(filteredPassages) { item in
                             VStack(alignment: .leading, spacing: 6) {
-                                Button { model.text = item.text; selectedTab = 0; editing = false } label: { Text(item.text).lineLimit(3).foregroundStyle(.primary) }
+                                Button { model.text = item.text; model.readerOffset = .zero; selectedTab = 0; editing = false } label: { Text(item.text).lineLimit(3).foregroundStyle(.primary) }
                                 Text(item.date, style: .date).font(.caption).foregroundStyle(.secondary)
                                 TextField("Study note", text: Binding(get: { model.saved.first(where: { $0.id == item.id })?.note ?? "" }, set: { model.updateNote(id: item.id, note: $0) }), axis: .vertical)
                             }
@@ -507,34 +595,67 @@ struct ReaderHome: View {
             .tabItem { Label("Library", systemImage: "books.vertical") }.tag(2)
     }
     private func lookup(focusSearch: Bool) -> some View {
-        VStack {
-            HStack {
+        VStack(spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 JapaneseSearchField(text: $model.word, focusRequest: searchFocusRequest,
-                                    active: focusSearch && selectedTab == 1 && !model.showingLookup,
-                                    ink: UIColor(ink)) { model.search() }.frame(height: 36)
-                Button { model.search() } label: { Image(systemName: "magnifyingglass") }.accessibilityLabel("Search dictionaries")
+                                    active: focusSearch && selectedTab == 1 && !model.showingEntry,
+                                    ink: UIColor(ink), changed: { model.typedSearch($0) }) { model.search() }.frame(height: 36)
                 if model.lookupBusy { ProgressView() }
-            }.padding(10).background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
-            List {
-                ForEach(model.dictionaries) { dictionary in
-                    let matches = model.hits.filter { $0.root == dictionary.root && $0.code == dictionary.code }
-                    if !matches.isEmpty {
-                        Section {
-                            ForEach(matches, id: \.identity) { hit in
-                                Button { model.open(hit) } label: {
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text(hit.word).font(.title3).foregroundStyle(ink)
-                                        if !hit.preview.isEmpty { Text(hit.preview).font(.body).foregroundStyle(ink.opacity(0.8)).lineLimit(2) }
-                                    }.padding(.vertical, 4)
-                                }.listRowBackground(paper)
-                            }
-                        } header: {
-                            HStack { Text(dictionary.name); Spacer(); Text("\(matches.count)") }
+                Button { model.search() } label: { Image(systemName: "arrow.right.circle") }.accessibilityLabel("Search dictionaries")
+            }.padding(.horizontal, 10).background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack {
+                    scopeChip("All", id: "")
+                    ForEach(model.dictionaries.filter { !model.disabledDictionaries.contains($0.id) }) { scopeChip($0.name, id: $0.id) }
+                }
+            }
+            resultGroups(model.hits)
+            HStack {
+                Picker("Match", selection: $model.searchMode) {
+                    Text("Starts with").tag(DictionarySearchMode.prefix)
+                    Text("Exact word").tag(DictionarySearchMode.exact)
+                }.pickerStyle(.menu)
+                Spacer()
+                Button { focusSearch() } label: { Image(systemName: "keyboard") }.accessibilityLabel("Show search keyboard")
+            }.padding(.horizontal, 8)
+        }.padding(.horizontal, 8).background(paper)
+            .onChange(of: model.searchMode) { _, _ in model.typedSearch(model.word) }
+    }
+    private func scopeChip(_ name: String, id: String) -> some View {
+        Button { model.searchScope = id; model.typedSearch(model.word) } label: {
+            Text(name).font(.caption).padding(.horizontal, 10).padding(.vertical, 7)
+                .background(model.searchScope == id ? accent.opacity(0.18) : .clear, in: Capsule())
+        }.foregroundStyle(ink)
+    }
+    private func resultGroups(_ hits: [DictionaryHit], switching: Bool = false) -> some View {
+        List {
+            ForEach(model.dictionaries) { dictionary in
+                let matches = hits.filter { $0.root == dictionary.root && $0.code == dictionary.code }
+                if !matches.isEmpty {
+                    Section {
+                        ForEach(matches, id: \.identity) { hit in
+                            Button {
+                                switchingDictionary = false
+                                wantsSearchFocus = false
+                                model.open(hit, replacingCurrent: switching)
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(hit.word).font(.headline).foregroundStyle(ink)
+                                        if !hit.preview.isEmpty { Text(hit.preview).font(.subheadline).foregroundStyle(ink.opacity(0.8)).lineLimit(2) }
+                                    }
+                                    Spacer(minLength: 0)
+                                    if switching && hit.identity == model.entryHitIdentity { Image(systemName: "checkmark").foregroundStyle(accent) }
+                                }.padding(.vertical, 3)
+                            }.listRowBackground(paper).accessibilityIdentifier("dictionaryResult_" + hit.word)
                         }
+                    } header: {
+                        HStack { Image(systemName: "book.closed"); Text(dictionary.name); Spacer(); Text("\(matches.count)") }
                     }
                 }
-            }.listStyle(.plain).scrollContentBackground(.hidden).background(paper)
-        }.padding(.horizontal, 8).background(paper)
+            }
+        }.listStyle(.plain).scrollContentBackground(.hidden).background(paper)
     }
 }
 
@@ -542,6 +663,8 @@ struct SelectableJapanese: UIViewRepresentable {
     let text: String
     var ink: UIColor = .label
     var paper: UIColor = .systemBackground
+    var initialOffset: CGPoint = .zero
+    var saveOffset: ((CGPoint) -> Void)? = nil
     let selected: (String) -> Void
     func makeCoordinator() -> Coordinator { Coordinator(selected) }
     func makeUIView(context: Context) -> UITextView {
@@ -552,12 +675,18 @@ struct SelectableJapanese: UIViewRepresentable {
     }
     func updateUIView(_ view: UITextView, context: Context) {
         context.coordinator.selected = selected
-        if view.text != text { view.text = text }
+        context.coordinator.saveOffset = saveOffset
+        if view.text != text {
+            view.text = text
+            DispatchQueue.main.async { view.setContentOffset(initialOffset, animated: false) }
+        }
         if view.textColor != ink { view.textColor = ink }
         if view.backgroundColor != paper { view.backgroundColor = paper }
     }
     final class Coordinator: NSObject, UITextViewDelegate {
         var selected: (String) -> Void
+        var saveOffset: ((CGPoint) -> Void)?
+        func scrollViewDidScroll(_ scrollView: UIScrollView) { saveOffset?(scrollView.contentOffset) }
         var pending: DispatchWorkItem?
         init(_ selected: @escaping (String) -> Void) { self.selected = selected }
         func textViewDidChangeSelection(_ textView: UITextView) {

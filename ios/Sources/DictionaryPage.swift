@@ -7,6 +7,8 @@ struct DictionaryPage: UIViewRepresentable {
     let root: URL
     let code: String
     var paperRGB: Int? = nil
+    var initialOffset: CGPoint = .zero
+    var saveOffset: ((CGPoint) -> Void)? = nil
     var followLink: ((String) -> Void)? = nil
     let lookup: (String) -> Void
     static func audioLinks(_ source: String) -> String {
@@ -51,7 +53,13 @@ struct DictionaryPage: UIViewRepresentable {
         });
     })();
     """
-    func makeCoordinator() -> Coordinator { Coordinator(root: root, code: code, followLink: followLink, lookup: lookup) }
+    func makeCoordinator() -> Coordinator {
+        let coordinator = Coordinator(root: root, code: code, followLink: followLink, lookup: lookup)
+        coordinator.paperRGB = paperRGB
+        coordinator.initialOffset = initialOffset
+        coordinator.saveOffset = saveOffset
+        return coordinator
+    }
     static func makeWebView(html: String, coordinator: Coordinator) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = false
@@ -59,7 +67,15 @@ struct DictionaryPage: UIViewRepresentable {
         configuration.setURLSchemeHandler(coordinator, forURLScheme: "jpread")
         configuration.userContentController.add(coordinator, contentWorld: selectionWorld, name: "readerSelection")
         configuration.userContentController.addUserScript(WKUserScript(source: selectionScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: selectionWorld))
+        if let rgb = coordinator.paperRGB {
+            let hex = String(format: "#%06X", rgb & 0xFFFFFF)
+            let ink = Palette.luminance(Palette.channels(rgb)) < 0.179 ? "#ffffff" : "#000000"
+            let css = "html,body{background:\(hex)!important;color:\(ink)!important}body *{background-color:transparent!important;color:inherit!important}a{text-decoration:underline!important}"
+            let script = "const s=document.createElement('style');s.textContent='\(css)';document.head.appendChild(s);"
+            configuration.userContentController.addUserScript(WKUserScript(source: script, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: selectionWorld))
+        }
         let view = WKWebView(frame: .zero, configuration: configuration)
+        view.scrollView.delegate = coordinator
         view.accessibilityIdentifier = "dictionaryEntryPage"
         view.navigationDelegate = coordinator
         view.loadHTMLString(html, baseURL: URL(string: "jpread://dictionary/"))
@@ -74,29 +90,26 @@ struct DictionaryPage: UIViewRepresentable {
         view.backgroundColor = paperRGB.map { UIColor(Palette.color($0)) } ?? .systemBackground
         view.scrollView.backgroundColor = view.backgroundColor
         context.coordinator.paperRGB = paperRGB
-        context.coordinator.applyPaper(view)
+        context.coordinator.saveOffset = saveOffset
     }
     static func dismantleUIView(_ view: WKWebView, coordinator: Coordinator) {
         view.configuration.userContentController.removeScriptMessageHandler(forName: "readerSelection", contentWorld: selectionWorld)
         view.stopLoading()
     }
-    final class Coordinator: NSObject, WKURLSchemeHandler, WKNavigationDelegate, WKScriptMessageHandler {
+    final class Coordinator: NSObject, WKURLSchemeHandler, WKNavigationDelegate, WKScriptMessageHandler, UIScrollViewDelegate {
         let root: URL
         let code: String
         var lookup: (String) -> Void
         var followLink: ((String) -> Void)?
         var paperRGB: Int?
-        func applyPaper(_ view: WKWebView) {
-            let css: String
-            if let rgb = paperRGB {
-                let hex = String(format: "#%06X", rgb & 0xFFFFFF)
-                let ink = Palette.luminance(Palette.channels(rgb)) < 0.179 ? "#ffffff" : "#000000"
-                css = "html,body{background:\(hex)!important;color:\(ink)!important}body *{background-color:transparent!important;color:inherit!important}a{text-decoration:underline!important}"
-            } else { css = "" }
-            let script = "(() => {let s=document.getElementById('reader-palette');if(!s){s=document.createElement('style');s.id='reader-palette';document.head.appendChild(s);}s.textContent='\(css)';})()"
-            view.evaluateJavaScript(script, in: nil, in: DictionaryPage.selectionWorld, completionHandler: nil)
+        var initialOffset: CGPoint = .zero
+        var saveOffset: ((CGPoint) -> Void)?
+        private var loaded = false
+        func scrollViewDidScroll(_ scrollView: UIScrollView) { if loaded { saveOffset?(scrollView.contentOffset) } }
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            webView.scrollView.setContentOffset(initialOffset, animated: false)
+            loaded = true
         }
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { applyPaper(webView) }
         let queue = DispatchQueue(label: "JapaneseReader.media")
         var cancelled = Set<ObjectIdentifier>()
         init(root: URL, code: String, followLink: ((String) -> Void)? = nil, lookup: @escaping (String) -> Void) { self.root = root; self.code = code; self.lookup = lookup; self.followLink = followLink }

@@ -1,6 +1,39 @@
 import XCTest
 
 final class ReaderUITests: XCTestCase {
+    func testLiveJapaneseSearchDictionarySwitcherAndBack() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-dictionary-fixture"]
+        app.launch()
+        app.tabBars.buttons["Search"].tap()
+        let field = app.textFields["dictionarySearchField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.typeText("みほん")
+        let result = app.buttons["dictionaryResult_みほん"].firstMatch
+        XCTAssertTrue(result.waitForExistence(timeout: 15), "Search must happen without tapping submit")
+        XCTAssertTrue(app.buttons["dictionaryResult_みほんいち"].firstMatch.exists)
+        XCTAssertTrue(app.keyboards.firstMatch.exists)
+        let searchShot = XCTAttachment(screenshot: app.screenshot())
+        searchShot.name = "Live Japanese prefix results"; searchShot.lifetime = .keepAlways; add(searchShot)
+        result.tap()
+        XCTAssertTrue(app.webViews["dictionaryEntryPage"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.tabBars.buttons["Read"].exists)
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
+        app.buttons["switchDictionary"].tap()
+        XCTAssertTrue(app.staticTexts["Demo English–Japanese"].waitForExistence(timeout: 5))
+        let switchShot = XCTAttachment(screenshot: app.screenshot())
+        switchShot.name = "Dictionary switcher"; switchShot.lifetime = .keepAlways; add(switchShot)
+        app.buttons["dictionaryResult_みほん"].lastMatch.tap()
+        let entryShot = XCTAttachment(screenshot: app.screenshot())
+        entryShot.name = "Entry with persistent tabs"; entryShot.lifetime = .keepAlways; add(entryShot)
+        app.buttons["Back"].tap()
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        field.typeText("missing")
+        XCTAssertEqual(field.value as? String, "missing")
+        app.buttons["Back to Main Page"].tap()
+        XCTAssertTrue(app.textViews["passageEditor"].waitForExistence(timeout: 5))
+    }
     func testSearchFocusSelectAllAndReturnToReader() {
         let app = XCUIApplication()
         app.launch()

@@ -7,6 +7,8 @@ struct ReaderError: LocalizedError {
     var errorDescription: String? { message }
     init(_ message: String) { self.message = message }
 }
+enum DictionarySearchMode: String { case prefix, exact }
+
 struct DictionaryHit: Identifiable {
     let id: Int64
     let root: URL
@@ -79,7 +81,7 @@ final class DictionaryStore {
         guard let dictionary = try catalog().first(where: { $0["code"] == code }), let folder = dictionary["root"], let css = dictionary["css"], !css.isEmpty else { return "" }
         return (try? String(contentsOf: path(folder + "/" + css), encoding: .utf8)) ?? ""
     }
-    func search(_ word: String, codes: [String]? = nil) throws -> [DictionaryHit] {
+    func search(_ word: String, codes: [String]? = nil, mode: DictionarySearchMode = .prefix) throws -> [DictionaryHit] {
         let key = Self.normalize(word)
         guard !key.isEmpty else { return [] }
         var hits: [DictionaryHit] = []
@@ -89,7 +91,7 @@ final class DictionaryStore {
             let code = dictionary["code"]!
             guard let file = try query("SELECT id FROM files WHERE code=? AND kind='.mdx'", [code]).first?["id"] else { continue }
             let rows = try query("SELECT id,word FROM records WHERE file=? AND norm=? LIMIT 30", [file, key])
-            let prefix = try query("SELECT id,word FROM records WHERE file=? AND norm>? AND norm<? ORDER BY norm,id LIMIT 12", [file, key, key + "\u{10ffff}"])
+            let prefix = mode == .prefix ? try query("SELECT id,word FROM records WHERE file=? AND norm>? AND norm<? ORDER BY norm,id LIMIT 12", [file, key, key + "\u{10ffff}"]) : []
             hits += (rows + prefix).map { row in
                 var hit = DictionaryHit(id: Int64(row["id"]!)!, root: root, code: code, dictionary: dictionary["name"]!, word: row["word"]!)
                 // A missing preview must never hide an otherwise usable match.
