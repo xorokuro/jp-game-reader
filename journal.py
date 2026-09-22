@@ -315,6 +315,7 @@ def main():
     if config_path.exists():settings.update(json.loads(config_path.read_text(encoding='utf-8')))
     settings.setdefault('capture_mode','obs' if not args.no_capture else 'paste')
     if args.no_capture:settings['capture_mode']='paste'
+    journal.save_text=settings['capture_mode'] in ('obs','window')
     corpus=[] # This game has no supplied extracted script.
     matcher=Matcher(corpus);recorder=Recorder(journal,matcher)
     state={'status':'Starting recorder','paused':True,'raw':'','last':journal.get(journal.recent()[0]['id']) if journal.recent() else None,'version':0,'retry':{'pending':False,'message':''}};lock=threading.RLock();stop=threading.Event();restart=threading.Event();worker=[None]
@@ -457,6 +458,7 @@ def main():
                     selected=capture_sources.select(body)
                     with lock:
                         settings.update(selected)
+                        journal.save_text=selected['capture_mode'] in ('obs','window')
                         config_path.write_text(json.dumps(settings,indent=2),encoding='utf-8')
                         state['paused']=True;state['retry']={'pending':False,'message':''};state['raw']=''
                         recorder.candidate='';recorder.last='';recorder.repeats=0

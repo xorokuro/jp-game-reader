@@ -3,9 +3,9 @@
 The desktop reader now combines the Fortune Weave desktop design and controls with
 Japanese Reader's portable backend. Use one reading block and one dictionary panel.
 
-- **Paste text** opens a temporary passage. **Type / edit text** opens its editor.
+- **Paste text** opens a temporary passage. **Edit text** enables typing and corrections in the same block; it is off by default.
   Selecting words in the reading block searches your dictionaries.
-- **Save this text** saves that passage explicitly. It does not turn on auto-save.
+- **Save text / corrections** saves that passage explicitly. It does not turn on auto-save.
 - **Read from** selects Pasted text, OBS projector, or a visible Game window.
   Press **Use this source**, then Recognize or enable automatic recognition.
   Switching sources pauses capture and preserves the passage currently being read.
@@ -13,8 +13,8 @@ Japanese Reader's portable backend. Use one reading block and one dictionary pan
   dialogue area uncovered. This is not game-memory text hooking, background capture,
   or a promise of support for every game's rendering mode. OBS remains the fallback.
 - Manual retries require three stable OCR samples. Full-screen recognition remains available.
-- **Automatically save new captured text** is off at startup. Enable it for saved
-  capture history, automatic translations, and batch collection. Existing library
+- **Automatically save new captured text** defaults on for OBS and game-window
+  capture at startup and when selecting a source. Pasted passages require explicit saving. Existing library
   entries remain on disk. Temporary passages are not a permanent journal.
 - **A / D** moves between dictionaries with results, skipping empty/error dictionaries
   and wrapping around. **Left / Right** and **Ctrl+Z / Ctrl+Shift+Z** navigate search history

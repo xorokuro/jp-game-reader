@@ -16,11 +16,13 @@ dictionary files, imported once. The Windows Argos runtime is not bundled in iOS
 
 1. Copy the entire **Japanese Reader Portable** folder to your Windows laptop.
 2. Double-click **Start Reader.cmd**.
-3. Click the Japanese reading box to type or paste text directly, or use
-   **Paste Japanese here** to replace the whole block. Highlight a word to search.
-4. Text is temporary by default. To retain pasted text, enable **Save pasted /
-   recognized text to library** and click **Save this text**. The toggle also controls
-   whether new OCR text is retained and starts off each time the server starts.
+3. Use **Paste text** to open a passage. The reading block is read-only by default;
+   check **Edit text** to type or correct it. Highlight words for dictionary lookup.
+   Ctrl+V outside editable fields pastes into dictionary search automatically.
+4. Pasted text is temporary until you click **Save text / corrections**. OBS and
+   game-window capture default to automatic saving. Source settings are folded
+   below the reading workspace. Recognize returns to capture even after a paste;
+   **Restore previous draft** retrieves the displaced unsaved passage in this tab.
 5. Check the dictionaries to search. Only checked dictionaries have order numbers;
    newly checked dictionaries go last. Edit a number to change their saved order.
    Results are grouped by dictionary with clickable headwords and available readings.
@@ -96,6 +98,11 @@ Close the running reader before switching libraries. Use a different `--port`
 only if intentionally running multiple libraries.
 
 ## GitHub source vs personal USB bundle
+
+Downloading the GitHub source ZIP alone does **not** include your dictionaries or
+Python runtime. For another Windows laptop, transfer the complete personal portable
+folder (including `runtime` and `dictionaries`), then double-click `Start Reader.cmd`.
+Do not copy only the launcher.
 
 GitHub contains application source, documentation and tests. Purchased dictionaries,
 personal text, credentials, Argos packages and runtime binaries are excluded. The personal USB

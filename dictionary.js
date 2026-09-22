@@ -153,7 +153,8 @@
   function pasteAndSearch(event){
     if(event.defaultPrevented)return;
     const target=event.target;
-    if(target?.isContentEditable||target?.closest?.('input,textarea,select,[contenteditable],[role="textbox"],[role="combobox"]'))return;
+    const readOnlyPassage=target?.closest?.('#latest')?.getAttribute('contenteditable')==='false';
+    if(!readOnlyPassage&&(target?.isContentEditable||target?.closest?.('input,textarea,select,[contenteditable],[role="textbox"],[role="combobox"]')))return;
     const text=event.clipboardData?.getData('text/plain')?.trim();
     if(!text)return;
     event.preventDefault();
@@ -174,7 +175,7 @@
       if(event.button!==2)return;
       cancelLookup();selecting=false;skipLookup=true;
       const target=event.target;
-      if(target.closest('button,input,textarea,select,audio,video,summary,[contenteditable]'))return;
+      if(target.closest('button,input,textarea,select,audio,video,summary')||(target.closest('[contenteditable]')&&!target.closest('#latest')))return;
       const host=insideEntry?doc.body:target.closest('#latest,#latestenglish,#latestchinese');
       if(!host)return;
       const anchor=caretAt(event.clientX,event.clientY);
@@ -213,7 +214,7 @@
     doc.addEventListener('pointerdown',event=>{
       cancelLookup();skipLookup=event.shiftKey;
       const target=event.target;
-      selecting=event.button===0&&!target.closest('button,input,textarea,select,a,audio,summary,[contenteditable]')&&
+      selecting=event.button===0&&!target.closest('button,input,textarea,select,a,audio,summary')&&(!target.closest('[contenteditable]')||!!target.closest('#latest'))&&
         (insideEntry||!!target.closest('#latest,#latestenglish,#latestchinese'));
     });
     doc.addEventListener('pointercancel',()=>{selecting=false;cancelLookup();});
@@ -274,7 +275,7 @@
     return {word:spokenWord,dictionaries,code:currentCode,entry:currentEntry};
   }
   function restoreSearch(saved){
-    spokenWord=saved.word;input.value=saved.word;dictionaries=saved.dictionaries;currentCode=saved.code;panel.hidden=false;
+    spokenWord=saved.word;input.value=saved.word;dictionaries=saved.dictionaries;currentCode=saved.code;panel.hidden=false;if(panel.querySelector('.dictionary-disclosure'))panel.querySelector('.dictionary-disclosure').open=true;
     renderChoices();renderTabs();
     const dictionary=dictionaries.find(d=>d.code===saved.code&&selectedCodes.has(d.code));
     if(dictionary&&saved.entry)openEntry(dictionary,saved.entry);
@@ -352,13 +353,13 @@
       await mainKenkyushaFirst(result.dictionaries);
       if(version!==requestVersion)return;
       if(previous&&previous.word!==word){rememberSearch(searchHistory,previous);forwardHistory.length=0;}
-      spokenWord=word;panel.hidden=false;dictionaries=result.dictionaries;currentCode='';renderChoices();renderTabs();
+      spokenWord=word;panel.hidden=false;if(panel.querySelector('.dictionary-disclosure'))panel.querySelector('.dictionary-disclosure').open=true;dictionaries=result.dictionaries;currentCode='';renderChoices();renderTabs();
       status.textContent='“'+word+'” · Showing your chosen dictionaries. Change them under “Choose dictionaries”.';
     }catch(e){if(version===requestVersion)status.textContent=e.message;}finally{if(version===requestVersion){button.disabled=false;searchPending=false;updateBack();}}
   }
   button.onclick=()=>searchDictionaries();
   input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();button.click();}});
-  document.getElementById('dict-close').onclick=()=>{panel.hidden=true;frame.removeAttribute('src');if(window.speechSynthesis)speechSynthesis.cancel();};
+  document.getElementById('dict-close').onclick=()=>{if(panel.querySelector('.dictionary-disclosure'))panel.querySelector('.dictionary-disclosure').open=false;else panel.hidden=true;if(window.speechSynthesis)speechSynthesis.cancel();};
   document.getElementById('dict-read').onclick=()=>{
     if(!window.speechSynthesis){status.textContent='Synthetic voice is unavailable in this browser. Use the recorded pronunciation players.';return;}
     const language=/[\u3040-\u30ff\u3400-\u9fff]/.test(spokenWord)?'ja':'en';

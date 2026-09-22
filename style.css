@@ -582,3 +582,17 @@ html:not(.show-study-prompt) .full-study-prompt{display:none}
 #latest:empty::before{content:'Paste Japanese to start reading';opacity:.5}
 .reader-inputs{margin-top:12px}
 [hidden]{display:none!important}
+/* Focused workspace: primary panels first, all setup disclosures below. */
+#reader-workspace .current{position:static}
+#reader-workspace details.reading-disclosure,#dictionary-panel details.dictionary-disclosure{border:0;background:transparent;padding:0;margin:0}
+.reading-disclosure>summary,.dictionary-disclosure>summary{margin-bottom:18px;color:var(--card-accent,#80bdcf);font-weight:700}
+.dictionary-quick-search{margin:12px 0 18px;padding:0;border:0;background:transparent}
+.dictionary-quick-search .toolbar{display:flex;flex-wrap:wrap}
+.dictionary-quick-search input{min-width:120px;flex:1}
+#latest[contenteditable]{min-height:160px;white-space:pre-wrap;overflow-wrap:anywhere;cursor:text}
+#latest[contenteditable]:focus{outline:2px solid var(--card-accent,#80bdcf);outline-offset:3px}
+#latest[data-dirty="true"]{border-left-color:#e3b96b}
+.settings-disclosure{margin:0}
+.translation-disclosure{margin:18px 0}
+.translation-disclosure>summary{margin-bottom:12px}
+main.shell{padding-top:16px}

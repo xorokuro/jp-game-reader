@@ -55,9 +55,11 @@ class UnifiedReader(unittest.TestCase):
                 self.assertFalse(request('state')['save_text'])
                 request('capture-source',{'mode':'obs'})
                 self.assertTrue(request('state')['capture_enabled'])
+                self.assertTrue(request('state')['save_text'])
                 self.assertTrue(request('state')['paused'])
                 request('capture-source',{'mode':'paste'})
                 self.assertFalse(request('state')['capture_enabled'])
+                self.assertFalse(request('state')['save_text'])
                 self.assertEqual(request('sentence?id='+str(saved['id']))['japanese'],temp['japanese'])
                 for path,body in [('retry',{}),('capture-source',{'mode':'window','handle':0,'pid':0}),('add',{'japanese':'文章','save':'yes'})]:
                     with self.assertRaises(urllib.error.HTTPError):request(path,body)

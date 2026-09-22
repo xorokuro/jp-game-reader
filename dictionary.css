@@ -120,3 +120,16 @@ html,body{overflow-anchor:none}
  #dict-entries{max-height:150px}
  #dict-frame{height:560px}
 }
+
+/* Keep the focused desktop columns aligned; the old sticky offset no longer
+   applies after moving the header beneath the workspace. */
+@media(min-width:1100px){
+ #reader-workspace{align-items:stretch}
+ #reader-workspace>section.current{position:static;top:auto;align-self:stretch}
+ #reader-workspace>#dictionary-panel{align-self:stretch}
+ #reader-workspace #dict-frame{height:clamp(320px,45vh,600px)}
+ #reader-workspace>section.current:has(>.reading-disclosure:not([open])),
+ #reader-workspace>#dictionary-panel:has(>.dictionary-disclosure:not([open])){align-self:start}
+}
+.reading-disclosure>.field-label{display:flex;align-items:center;gap:8px;min-width:0;width:100%}
+.reading-disclosure>.field-label select{flex:1;min-width:0;max-width:100%}

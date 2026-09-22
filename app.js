@@ -182,11 +182,17 @@ const fullScreenOcr=document.createElement('button');fullScreenOcr.id='retry-ful
 fullScreenOcr.textContent='↻ 辨識整個遊戲畫面';
 fullScreenOcr.title='只辨識一次完整 OBS 投影畫面，完成後恢復平常的台詞範圍。請保持投影視窗完整可見。';
 $('retry-ocr').after(fullScreenOcr);
+function resumeCapturedReading(){
+ window.dispatchEvent(new Event('reader-resume-capture'));
+ $('latest').dataset.dirty='false';
+ $('latest').blur();window.getSelection()?.removeAllRanges();
+ startupBlank=false;navSeq=null;
+}
 function requestOcr(fullFrame=false){return action(async()=>{
- if(dirty())throw Error('請先儲存編輯內容。');
+ if(document.querySelector('[data-dirty="true"]:not(#latest)'))throw Error('請先儲存日誌中的編輯內容。');
  $('retry-ocr').disabled=true;
  fullScreenOcr.disabled=true;
- try{const result=await api('retry',{full_frame:fullFrame});rememberFullFrameRetry(result.retry.full_frame?result.retry.deadline:null);following=!result.retry.full_frame;rememberPin();updateNavigation();$('retry-message').textContent=result.retry.message;}
+ try{const result=await api('retry',{full_frame:fullFrame});resumeCapturedReading();rememberFullFrameRetry(result.retry.full_frame?result.retry.deadline:null);following=!result.retry.full_frame;rememberPin();updateNavigation();$('retry-message').textContent=result.retry.message;}
  catch(e){$('retry-ocr').disabled=false;fullScreenOcr.disabled=false;throw e;}
 });}
 $('retry-ocr').onclick=()=>requestOcr();
@@ -218,7 +224,7 @@ const removeCurrent=E('button','移除這筆文字');removeCurrent.onclick=()=>a
 
 function rememberPin(){if(following)sessionStorage.removeItem('journalPin');else if(currentId)sessionStorage.setItem('journalPin',JSON.stringify({id:currentId,seq:navSeq}));}
 function setReaderText(id,text){const node=$(id);if(node.textContent!==text)node.textContent=text;}
-function readerSelectionActive(){const selection=window.getSelection();return selection&&!selection.isCollapsed&&['latest','latestenglish','latestchinese'].some(id=>{const node=$(id);return node.contains(selection.anchorNode)||node.contains(selection.focusNode);});}
+function readerSelectionActive(){if(document.activeElement===$('latest'))return true;const selection=window.getSelection();return selection&&!selection.isCollapsed&&['latest','latestenglish','latestchinese'].some(id=>{const node=$(id);return node.contains(selection.anchorNode)||node.contains(selection.focusNode);});}
 function showCurrent(row){
  if(row)startupBlank=false;
  removeCurrent.hidden=!!row?.temporary;$('editcurrent').hidden=!!row?.temporary;
@@ -250,7 +256,7 @@ async function navigateSentence(direction,seq=navSeq){
 $('sentence-prev').onclick=()=>action(()=>navigateSentence('previous'));
 $('sentence-next').onclick=()=>action(()=>navigateSentence('next'));
 $('recent-lines').onchange=()=>action(()=>navigateSentence('at',Number($('recent-lines').value)));
-$('sentence-live').onclick=()=>action(async()=>{if(dirty())throw Error('請先儲存編輯內容。');rememberFullFrameRetry(null);following=true;navSeq=recent[0]?.seq;rememberPin();showCurrent(liveRecord);});
+$('sentence-live').onclick=()=>action(async()=>{if(document.querySelector('[data-dirty="true"]:not(#latest)'))throw Error('請先儲存日誌中的編輯內容。');resumeCapturedReading();rememberFullFrameRetry(null);following=true;navSeq=recent[0]?.seq;rememberPin();showCurrent(liveRecord);});
 let pendingSignature='',reviewBusy=false;
 const ocrDrafts=JSON.parse(localStorage.getItem('journal-ocr-drafts')||'{}');
 function showOCRReview(data){
