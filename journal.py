@@ -22,6 +22,7 @@ def sentence_key(text):
 
 class Journal:
     def __init__(self,path):
+        self.save_text=True;self.temporary={};self.temporary_id=0
         self.path=path
         self.export_lock=threading.Lock()
         self.export_pending=threading.Event();self.export_stop=threading.Event();self.export_error='';self.exported_at=None
@@ -63,6 +64,7 @@ class Journal:
                         db.execute(f'UPDATE sentences SET {f}=? WHERE id=?',(row[f],prior['id']));prior[f]=row[f]
                 db.execute('UPDATE sentences SET duplicate_of=? WHERE id=?',(prior['id'],row['id']))
     def get(self,rowid):
+        if rowid<0:return self.temporary.get(rowid)
         with self.connect() as db:
             r=db.execute('SELECT * FROM sentences WHERE id=?',(rowid,)).fetchone()
             if r and r['duplicate_of']:r=db.execute('SELECT * FROM sentences WHERE id=?',(r['duplicate_of'],)).fetchone()
@@ -87,6 +89,11 @@ class Journal:
         return saved if keep else None
     def record(self,text,game='obs64',source_id=None,confidence=0,kind='ocr',raw=None,discard_new=False):
         if not norm(text):raise ValueError('Enter a sentence first.')
+        if not self.save_text:
+            self.temporary_id-=1
+            row=dict(id=self.temporary_id,japanese=text,original=raw or text,kind=kind,game=game,source_id=source_id,confidence=confidence,english='',traditional_chinese='',note='',starred=0,studied=0,encounters=1,first_seen='',last_seen='',temporary=True)
+            self.temporary[row['id']]=row
+            return row
         stamp=time.strftime('%Y-%m-%d %H:%M:%S');key=sentence_key(text)
         with self.connect() as db:
             # Serialize lookup and insert, including across recorder processes.
@@ -183,6 +190,12 @@ class Journal:
             db.execute('UPDATE sentences SET deleted=? WHERE id=?',(int(deleted),rowid))
         self.export_pending.set()
     def edit(self,item):
+        if int(item['id'])<0:
+            row=self.temporary.get(int(item['id']))
+            if row is None:raise ValueError('Temporary text is no longer available.')
+            for key in ('japanese','english','traditional_chinese','note','starred','studied'):
+                if key in item:row[key]=item[key]
+            return
         with self.connect() as db:
             old=db.execute('SELECT * FROM sentences WHERE id=?',(int(item['id']),)).fetchone()
             if not old:raise ValueError('Sentence not found.')
@@ -292,6 +305,7 @@ def main():
     ap=argparse.ArgumentParser();ap.add_argument('--port',type=int,default=18744);ap.add_argument('--no-browser',action='store_true');ap.add_argument('--no-capture',action='store_true');ap.add_argument('--database',default=str(DATA/'sentences.sqlite3'));args=ap.parse_args()
     Path(args.database).parent.mkdir(parents=True,exist_ok=True)
     journal=Journal(args.database)
+    journal.save_text=False
     journal.backup()
     journal.reconcile()
     journal.snapshot()
@@ -342,7 +356,7 @@ def main():
                                 state['status']='Save failed; retrying next observation: '+str(e)
                                 continue
                             if forced and re.search('[\u3040-\u30ff\u3400-\u9fff]',sample.get('text','')):
-                                retry.update(pending=not bool(result or recorder.ignored),result_id=result['id'] if result else None,text=sample['text'],message=('已重新辨識並儲存 #'+str(result['id']) if result else '已略過這筆雜訊。' if recorder.ignored else '已讀到文字，正在重新確認原文；請保持遊戲台詞不動。'))
+                                retry.update(pending=not bool(result or recorder.ignored),result_id=result['id'] if result else None,text=sample['text'],message=(('已辨識（暫存，不儲存）' if result.get('temporary') else '已重新辨識並儲存 #'+str(result['id'])) if result else '已略過這筆雜訊。' if recorder.ignored else '已讀到文字，正在重新確認原文；請保持遊戲台詞不動。'))
                             if result:state.update(last=result,version=state['version']+1)
                             elif recorder.ignored:state['status']='已略過這筆雜訊。'
                         if (full_frame or state['paused']) and not retry['pending']:
@@ -379,7 +393,7 @@ def main():
                         recent=journal.recent();current=journal.get(recent[0]['id']) if recent else None
                     pending=journal.pending()
                     for item in pending['rows']:item['suggestions']=matcher.suggest(item['text'])
-                    return self.send({**state,'workspace':str(Path(args.database).parent.resolve()),'capture_enabled':not args.no_capture,'last':current,'settings':settings,'translation_fields':True,'pending_ocr':pending,'recent':journal.recent(),'exports':{'pending':journal.export_pending.is_set(),'updated_at':journal.exported_at,'error':journal.export_error}})
+                    return self.send({**state,'workspace':str(Path(args.database).parent.resolve()),'save_text':journal.save_text,'capture_enabled':not args.no_capture,'last':current,'settings':settings,'translation_fields':True,'pending_ocr':pending,'recent':journal.recent(),'exports':{'pending':journal.export_pending.is_set(),'updated_at':journal.exported_at,'error':journal.export_error}})
             query=parse_qs(urlparse(self.path).query)
             try:
                 if p=='/api/translation-options':
@@ -430,6 +444,10 @@ def main():
                     import preferences
                     with lock:preferences.save(preferences_path,body)
                     return self.send({'ok':True})
+                elif self.path=='/api/save-text':
+                    if not isinstance(body.get('enabled'),bool):raise ValueError('Expected enabled true or false.')
+                    with lock:journal.save_text=body['enabled']
+                    return self.send({'enabled':journal.save_text})
                 elif self.path=='/api/translation':
                     with lock:
                         state['translation']['enabled']=bool(body['enabled'])

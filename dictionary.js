@@ -27,76 +27,94 @@
   onlineToggle.onchange=()=>{onlineButton.hidden=!onlineToggle.checked;try{localStorage.setItem('fortune-show-online-lookup',String(onlineToggle.checked));}catch{}};
   onlineSetting.append(onlineToggle,document.createTextNode(' Show “Look up online” (Jisho)'));
   document.getElementById('theme-settings').append(onlineSetting);
-  const panel=document.createElement('div');panel.id='dictionary-panel';panel.hidden=true;
+  const panel=document.createElement('div');panel.id='dictionary-panel';panel.hidden=false;
   panel.innerHTML='<div class="dict-toolbar"><strong>Your dictionaries</strong><button type="button" id="dict-read">Read word aloud (synthetic voice)</button><button type="button" id="dict-close">Close dictionary</button></div><p class="muted">Recorded dictionary pronunciations appear as audio players inside entries. Synthetic read-aloud uses an available browser voice.</p><div id="dict-tabs" role="group" aria-label="Installed dictionaries"></div><div class="dict-layout"><div id="dict-entries" aria-label="Matching entries"></div><iframe id="dict-frame" title="Purchased dictionary definition" sandbox="allow-same-origin"></iframe></div>';
   const workspace=document.createElement('div');workspace.id='reader-workspace';
   const current=document.querySelector('section.current');
   current.before(workspace);workspace.append(current,panel);
   const preferences=document.createElement('details');preferences.id='dict-preferences';
   preferences.innerHTML='<summary>Choose dictionaries</summary><p class="muted">Checked dictionaries appear in the results. Drag the ⠿ handle to reorder dictionaries. Choices and order are saved automatically.</p><div id="dict-choices"></div>';
-  panel.querySelector('.dict-toolbar').after(preferences);
+  panel.querySelector('.dict-toolbar').after(preferences);preferences.open=true;
   const preferenceKey='fortune-weave-visible-dictionaries-v1';
   let selectedCodes=null;
   try{const saved=JSON.parse(localStorage.getItem(preferenceKey));if(Array.isArray(saved))selectedCodes=new Set(saved);}catch{}
   if(selectedCodes===null)selectedCodes=new Set(['MDX_ALL','MDX_SHO','MDX_MEI']);
   let dictionaries=[],catalog=[],currentCode='',dictionaryOrder=[];
-  try{if(!localStorage.getItem('fortune-nhk-added')){selectedCodes.add('MDX_NHK');localStorage.setItem(preferenceKey,JSON.stringify([...selectedCodes]));localStorage.setItem('fortune-nhk-added','1');}}catch{}
-  try{if(!localStorage.getItem('fortune-sho-jcd3-added')){selectedCodes.add('MDX_SHO_JCD3');localStorage.setItem(preferenceKey,JSON.stringify([...selectedCodes]));localStorage.setItem('fortune-sho-jcd3-added','1');}}catch{}
-  try{if(!localStorage.getItem('fortune-crown-added')){selectedCodes.add('MDX_CROWN');localStorage.setItem(preferenceKey,JSON.stringify([...selectedCodes]));localStorage.setItem('fortune-crown-added','1');}}catch{}
   try{dictionaryOrder=JSON.parse(localStorage.getItem('fortune-dictionary-order')||'[]');if(!Array.isArray(dictionaryOrder))dictionaryOrder=[];}catch{}
-  try{if(!localStorage.getItem('fortune-kenkyusha-added')){selectedCodes.add('MDX_KEN');localStorage.setItem(preferenceKey,JSON.stringify([...selectedCodes]));localStorage.setItem('fortune-kenkyusha-added','1');}}catch{}
-  try{if(!localStorage.getItem('fortune-new-folder-dicts-v1')){["MDX_NEW_91FD134B", "MDX_NEW_B40701CF", "MDX_NEW_9E8F73AE", "MDX_NEW_D6719330", "MDX_NEW_DCCF31BC", "MDX_NEW_6420A558", "MDX_NEW_894F618D", "MDX_NEW_12ACC0F4", "MDX_NEW_5A4D159D", "MDX_NEW_FA6F3D98"].forEach(code=>selectedCodes.add(code));localStorage.setItem(preferenceKey,JSON.stringify([...selectedCodes]));localStorage.setItem('fortune-new-folder-dicts-v1','1');}}catch{}
-  try{if(!localStorage.getItem('fortune-direct-dictionaries-v1')){
-    const replacements={SANWIZJ3:'MDX_NEW_D6719330',GENIUSJ3:'MDX_NEW_DCCF31BC',OLEXJE2:'MDX_NEW_6420A558'};
-    selectedCodes=new Set([...selectedCodes].map(code=>replacements[code]||code).filter(code=>code.startsWith('MDX_')));
-    dictionaryOrder=[...new Set(dictionaryOrder.map(code=>replacements[code]||code).filter(code=>code.startsWith('MDX_')))];
-    try{localStorage.setItem(preferenceKey,JSON.stringify([...selectedCodes]));localStorage.setItem('fortune-dictionary-order',JSON.stringify(dictionaryOrder));localStorage.setItem('fortune-direct-dictionaries-v1','1');}catch{}
-  }}catch{}
   function ordered(items){return [...items].sort((a,b)=>{const ai=dictionaryOrder.indexOf(a.code),bi=dictionaryOrder.indexOf(b.code);return (ai<0?999:ai)-(bi<0?999:bi);});}
-  try{if(!localStorage.getItem('fortune-mdict-added-v1')){['MDX_ALL','MDX_SHO','MDX_MEI'].forEach(c=>selectedCodes.add(c));localStorage.setItem(preferenceKey,JSON.stringify([...selectedCodes]));localStorage.setItem('fortune-mdict-added-v1','1');}}catch{}
+  function saveChoices(){
+    try{localStorage.setItem(preferenceKey,JSON.stringify([...selectedCodes]));localStorage.setItem('fortune-dictionary-order',JSON.stringify(dictionaryOrder));}catch{status.textContent='Changes apply now, but could not be saved.';}
+  }
   function renderChoices(){
+    const all=catalog.length?catalog:dictionaries;
+    const enabled=ordered(all.filter(d=>selectedCodes.has(d.code)));
+    dictionaryOrder=enabled.map(d=>d.code);
+    preferences.querySelector('summary').textContent='Choose dictionaries · '+enabled.length+' selected';
     const choices=document.getElementById('dict-choices');choices.replaceChildren();
-    const available=ordered(catalog.length?catalog:dictionaries);
-    available.forEach((d,index)=>{
-      const label=document.createElement('label'),check=document.createElement('input');
-      check.type='checkbox';check.checked=selectedCodes.has(d.code);
-      check.onchange=()=>{if(check.checked)selectedCodes.add(d.code);else selectedCodes.delete(d.code);
-        try{localStorage.setItem(preferenceKey,JSON.stringify([...selectedCodes]));}catch{status.textContent='Choices apply now, but this browser could not save them.';}
-        renderTabs();if(input.value.trim())searchDictionaries(true);
+    function move(code,number){
+      if(!Number.isInteger(number)||number<1||number>enabled.length){status.textContent='Enter a whole number from 1 to '+enabled.length+'.';renderChoices();return;}
+      dictionaryOrder=dictionaryOrder.filter(c=>c!==code);dictionaryOrder.splice(number-1,0,code);saveChoices();renderChoices();renderTabs();
+    }
+    for(const d of [...enabled,...all.filter(d=>!selectedCodes.has(d.code))]){
+      const row=document.createElement('div');row.className='dict-choice-row';row.dataset.code=d.code;
+      const checked=selectedCodes.has(d.code);
+      if(checked){
+        const handle=document.createElement('button');handle.type='button';handle.className='dict-drag-handle';handle.textContent='⠿';handle.draggable=true;handle.setAttribute('aria-label','Drag to reorder '+d.name);
+        handle.ondragstart=e=>{e.dataTransfer.setData('text/plain',d.code);e.dataTransfer.effectAllowed='move';};
+        row.ondragover=e=>{e.preventDefault();e.dataTransfer.dropEffect='move';};
+        row.ondrop=e=>{e.preventDefault();const code=e.dataTransfer.getData('text/plain');if(selectedCodes.has(code))move(code,dictionaryOrder.indexOf(d.code)+1);};
+        handle.onkeydown=e=>{if(e.altKey&&['ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();const n=dictionaryOrder.indexOf(d.code)+1+(e.key==='ArrowUp'?-1:1);if(n>=1&&n<=enabled.length)move(d.code,n);}};
+        const position=document.createElement('input');position.type='number';position.className='dict-order-number';position.min='1';position.max=String(enabled.length);position.value=dictionaryOrder.indexOf(d.code)+1;position.step='1';position.setAttribute('aria-label','Order for '+d.name);
+        position.onchange=()=>move(d.code,Number(position.value));position.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();position.blur();}else if(e.key==='Escape'){position.value=dictionaryOrder.indexOf(d.code)+1;position.blur();}};
+        row.append(handle,position);
+      }
+      const label=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.checked=checked;
+      check.onchange=()=>{
+        dictionaryOrder=dictionaryOrder.filter(c=>c!==d.code);
+        if(check.checked){selectedCodes.add(d.code);dictionaryOrder.push(d.code);}else selectedCodes.delete(d.code);
+        saveChoices();renderChoices();renderTabs();if(input.value.trim())searchDictionaries(true);
       };
-      label.append(check,document.createTextNode(d.name));
-      const row=document.createElement('div');row.className='dict-choice-row';row.append(label);
-      row.dataset.code=d.code;
-      const handle=document.createElement('button');handle.type='button';handle.className='dict-drag-handle';handle.textContent='⠿';handle.setAttribute('aria-label','Drag to reorder '+d.name);handle.title='Drag to reorder; keyboard: Alt + Up / Down';row.prepend(handle);
-      function saveOrder(){dictionaryOrder=[...choices.children].map(item=>item.dataset.code);try{localStorage.setItem('fortune-dictionary-order',JSON.stringify(dictionaryOrder));}catch{status.textContent='Order changed, but could not save it.';}renderTabs();}
-      handle.draggable=true;
-      handle.ondragstart=event=>{event.dataTransfer.setData('text/plain',d.code);event.dataTransfer.effectAllowed='move';row.classList.add('dict-dragging');};
-      handle.ondragend=()=>row.classList.remove('dict-dragging');
-      row.ondragover=event=>{event.preventDefault();event.dataTransfer.dropEffect='move';};
-      row.ondrop=event=>{event.preventDefault();const source=[...choices.children].find(item=>item.dataset.code===event.dataTransfer.getData('text/plain'));if(source&&source!==row){choices.insertBefore(source,event.clientY<row.getBoundingClientRect().top+row.offsetHeight/2?row:row.nextSibling);saveOrder();}};
-      handle.onpointerdown=event=>{
-        if(event.button!==0||event.pointerType==='mouse')return;
-        event.preventDefault();handle.setPointerCapture(event.pointerId);row.classList.add('dict-dragging');
-        const original=[...choices.children];
-        handle.onpointermove=move=>{
-          const target=[...choices.children].find(item=>{const r=item.getBoundingClientRect();return move.clientY>=r.top&&move.clientY<=r.bottom;});
-          if(target&&target!==row&&target.parentElement===choices){const rect=target.getBoundingClientRect();choices.insertBefore(row,move.clientY<rect.top+rect.height/2?target:target.nextSibling);}
-          if(move.clientY<60)window.scrollBy(0,-25);else if(move.clientY>window.innerHeight-60)window.scrollBy(0,25);
-        };
-        const finish=cancel=>{handle.onpointermove=null;handle.onpointerup=null;handle.onpointercancel=null;row.classList.remove('dict-dragging');if(handle.hasPointerCapture(event.pointerId))handle.releasePointerCapture(event.pointerId);if(cancel)original.forEach(item=>choices.append(item));else saveOrder();};
-        handle.onpointerup=()=>finish(false);handle.onpointercancel=()=>finish(true);
-      };
-      handle.onkeydown=event=>{if(!event.altKey||!['ArrowUp','ArrowDown'].includes(event.key))return;event.preventDefault();const sibling=event.key==='ArrowUp'?row.previousElementSibling:row.nextElementSibling;if(sibling){choices.insertBefore(row,event.key==='ArrowUp'?sibling:sibling.nextSibling);saveOrder();handle.focus();}};
-      choices.append(row);
-    });
+      label.append(check,document.createTextNode(d.name));row.append(label);choices.append(row);
+    }
   }
   function renderTabs(){
-    tabs.replaceChildren();const visible=ordered(dictionaries.filter(d=>selectedCodes.has(d.code)));
-    visible.forEach(d=>{const b=document.createElement('button');b.type='button';b.dataset.code=d.code;
-      b.textContent=d.name+' ('+(d.error?'error':d.count)+')';b.onclick=()=>choose(d);tabs.append(b);
+    previewObserver.disconnect();tabs.replaceChildren();const visible=ordered(dictionaries.filter(d=>selectedCodes.has(d.code)));
+    const wordHeading=document.createElement('div');wordHeading.className='dict-preview-heading';
+    const title=document.createElement('strong');title.textContent=spokenWord?'Dictionary: '+spokenWord:'Highlight a word to preview your dictionaries';wordHeading.append(title);
+    for(const kanji of [...new Set((spokenWord||'').match(/[\u3400-\u9fff]/gu)||[])]){
+      const k=document.createElement('button');k.type='button';k.textContent=kanji;k.title='Look up this kanji in your selected dictionaries';k.onclick=()=>{input.value=kanji;searchDictionaries();};wordHeading.append(k);
+    }
+    tabs.append(wordHeading);
+    visible.forEach(d=>{
+      const group=document.createElement('section');group.className='dict-result-group';
+      const heading=document.createElement('h3');heading.textContent=d.name+' · '+(d.error?'error':d.count);group.append(heading);
+      for(const row of d.entries||[]){
+        const result=document.createElement('button');result.type='button';result.className='dict-result-row';result.dataset.code=d.code;result.dataset.entry=String(row.id);result.textContent=row.previewLabel||row.title;
+        result.onclick=()=>{currentCode=d.code;openEntry(d,row);};group.append(result);
+        result._preview={dictionary:d,row};previewObserver.observe(result);
+      }
+      if(!d.entries?.length){const empty=document.createElement('p');empty.textContent=d.error||'No matches';group.append(empty);}
+      tabs.append(group);
     });
-    const first=visible.find(d=>d.code===currentCode)||visible.find(d=>d.entries.length)||visible[0];
-    if(first)choose(first);else{currentCode='';entries.textContent='No dictionaries selected. Open “Choose dictionaries” to enable one.';frame.removeAttribute('src');}
+    if(!visible.length){const empty=document.createElement('p');empty.textContent='Choose a dictionary above, then highlight a word.';tabs.append(empty);}
+    tabs.hidden=false;entries.hidden=true;frame.hidden=true;frame.removeAttribute('src');
+  }
+  const previewQueue=[];let previewJobs=0;
+  const previewObserver=new IntersectionObserver(items=>{for(const item of items){if(item.isIntersecting){previewObserver.unobserve(item.target);previewQueue.push(item.target);}}fillReadings();});
+  async function fillReadings(){
+    while(previewJobs<4&&previewQueue.length){
+      const target=previewQueue.shift();if(!target.isConnected)continue;
+      const {dictionary,row}=target._preview;if(row.previewLabel){target.textContent=row.previewLabel;continue;}
+      previewJobs++;
+      (async()=>{try{
+        const response=await fetch('/api/dictionary/entry?'+new URLSearchParams({code:dictionary.code,id:row.id}));if(!response.ok)return;
+        const doc=new DOMParser().parseFromString(await response.text(),'text/html');
+        const reading=doc.querySelector('h3 .pinyin_h');
+        const head=doc.querySelector('.HeadG,.head .word,.headword,.entry-headword,h3,h1');
+        let label=reading?reading.textContent.trim()+'【'+row.title+'】':head?.textContent.trim().replace(/\s+/g,' ');
+        if(label&&label.length<=140){row.previewLabel=label;if(target.isConnected)target.textContent=label;}
+      }catch{}finally{previewJobs--;fillReadings();}})();
+    }
   }
   const tabs=document.getElementById('dict-tabs'),entries=document.getElementById('dict-entries'),frame=document.getElementById('dict-frame');
   let dictionaryZoom=100;
@@ -194,7 +212,7 @@
     doc.addEventListener('pointerdown',event=>{
       cancelLookup();skipLookup=event.shiftKey;
       const target=event.target;
-      selecting=event.button===0&&!target.closest('button,input,textarea,select,a,audio,summary,[contenteditable]')&&
+      selecting=event.button===0&&(!target.closest('button,input,textarea,select,a,audio,summary,[contenteditable]')||!!target.closest('#latest'))&&
         (insideEntry||!!target.closest('#latest,#latestenglish,#latestchinese'));
     });
     doc.addEventListener('pointercancel',()=>{selecting=false;cancelLookup();});
@@ -213,10 +231,19 @@
     });
   }
   enableSelectionSearch(document);
+  // Entries are a separate document, so the reader's light/dark choice is copied in.
+  function matchEntryTheme(){
+    try{
+      const entryDocument=frame.contentDocument;
+      if(entryDocument?.documentElement)entryDocument.documentElement.dataset.mode=document.documentElement.dataset.mode||'dark';
+    }catch{}
+  }
+  document.addEventListener('readerthemechange',matchEntryTheme);
   frame.addEventListener('load',()=>{
     // Entries stay sandboxed; the parent can read selections in local documents.
     let entryDocument;try{entryDocument=frame.contentDocument;}catch{return;}
     if(!entryDocument)return;
+    matchEntryTheme();
     applyDictionaryZoom();
     // Scroll only the embedded document. URL fragments can also scroll its
     // containing page when the browser brings the target into view.
@@ -249,13 +276,14 @@
     for(const control of [back,leftBack]){control.disabled=!searchHistory.length&&!(searchPending&&spokenWord);control.title=searchHistory.length?'Previous: '+searchHistory.at(-1).word:'No earlier search';}
     for(const control of [next,leftNext]){control.disabled=!forwardHistory.length;control.title=forwardHistory.length?'Next: '+forwardHistory.at(-1).word:'No later search';}
   }
-  function rememberSearch(stack,saved){if(saved){stack.push(saved);if(stack.length>5)stack.shift();}}
+  function rememberSearch(stack,saved){if(saved){stack.push(saved);if(stack.length>100)stack.shift();}}
   function snapshotSearch(){
     if(!spokenWord)return null;
-    return {word:spokenWord,dictionaries,code:currentCode,entry:currentEntry};
+    return {word:spokenWord,dictionaries,code:currentCode,entry:currentEntry,codes:[...selectedCodes].sort().join('|')};
   }
   function restoreSearch(saved){
     spokenWord=saved.word;input.value=saved.word;dictionaries=saved.dictionaries;currentCode=saved.code;panel.hidden=false;
+    if(saved.codes!==[...selectedCodes].sort().join('|')){searchDictionaries(true);return;}
     renderChoices();renderTabs();
     const dictionary=dictionaries.find(d=>d.code===saved.code&&selectedCodes.has(d.code));
     if(dictionary&&saved.entry)openEntry(dictionary,saved.entry);
@@ -276,11 +304,13 @@
     restoreSearch(saved);updateBack();
   };
   leftBack.onclick=back.onclick;leftNext.onclick=next.onclick;updateBack();
-  for(const control of [back,leftBack])control.setAttribute('aria-keyshortcuts','ArrowLeft');
-  for(const control of [next,leftNext])control.setAttribute('aria-keyshortcuts','ArrowRight');
-  selectionHint.textContent+=' Use ← / → for previous / next dictionary search (outside text fields).';
+  for(const control of [back,leftBack])control.setAttribute('aria-keyshortcuts','Control+z ArrowLeft');
+  for(const control of [next,leftNext])control.setAttribute('aria-keyshortcuts','Control+Shift+z ArrowRight');
+  selectionHint.textContent+=' Use Ctrl+Z / Ctrl+Shift+Z (or ← / →) for previous / next search outside text fields.';
   function openEntry(dictionary,row){
-    currentEntry=row;
+    currentEntry=row;currentCode=dictionary.code;tabs.hidden=true;entries.hidden=false;entries.replaceChildren();frame.hidden=false;
+    const backToResults=document.createElement('button');backToResults.type='button';backToResults.textContent='← All dictionary results';backToResults.onclick=()=>{tabs.hidden=false;entries.hidden=true;frame.hidden=true;};entries.append(backToResults);
+    const entryTitle=document.createElement('strong');entryTitle.textContent=dictionary.name+' · '+(row.previewLabel||row.title);entries.append(entryTitle);
     const params=new URLSearchParams({code:dictionary.code,id:row.id,anchor:row.anchor||''});
     frame.src='/api/dictionary/entry?'+params;
     [...entries.children].forEach(b=>b.classList.toggle('active',b.dataset.entry===String(row.id)+'#'+row.anchor));
@@ -288,7 +318,7 @@
   function choose(dictionary){
     currentEntry=null;
     currentCode=dictionary.code;
-    [...tabs.children].forEach(b=>{const selected=b.dataset.code===dictionary.code;b.classList.toggle('active',selected);b.setAttribute('aria-pressed',String(selected));});
+    tabs.querySelectorAll('button[data-code]').forEach(b=>{const selected=b.dataset.code===dictionary.code;b.classList.toggle('active',selected);b.setAttribute('aria-pressed',String(selected));});
     entries.replaceChildren();frame.removeAttribute('src');
     if(dictionary.error){entries.textContent='Dictionary error: '+dictionary.error;return;}
     if(!dictionary.entries.length){entries.textContent='No matches in this dictionary.';return;}
@@ -347,6 +377,13 @@
     status.textContent='Synthetic read-aloud: '+voice.name;
   };
   if(window.speechSynthesis)speechSynthesis.getVoices();
-  preferences.querySelector('p').textContent='Search only checked dictionaries. Use ↑ / ↓ to set tab order. Your choices are saved.';
-  fetch('/api/dictionary/catalog').then(r=>{if(!r.ok)throw Error('catalog');return r.json();}).then(data=>{catalog=data.dictionaries;renderChoices();}).catch(()=>{});
+  preferences.querySelector('p').textContent='Only checked dictionaries are numbered. Newly checked dictionaries go last. Enter a number to reorder your selected dictionaries; choices and order are saved automatically.';
+  const choiceActions=document.createElement('div');choiceActions.className='toolbar';
+  for(const [title,codes] of [['Select all',null],['Clear selection',[]],['Use 3 main dictionaries',['MDX_ALL','MDX_SHO','MDX_MEI']]]){
+    const action=document.createElement('button');action.type='button';action.textContent=title;
+    action.onclick=()=>{const wanted=codes===null?[...dictionaryOrder,...catalog.map(d=>d.code)]:codes;selectedCodes=new Set(wanted);dictionaryOrder=[...selectedCodes];saveChoices();renderChoices();renderTabs();if(input.value.trim())searchDictionaries(true);};
+    choiceActions.append(action);
+  }
+  preferences.querySelector('p').after(choiceActions);
+  fetch('/api/dictionary/catalog').then(r=>{if(!r.ok)throw Error('catalog');return r.json();}).then(data=>{catalog=data.dictionaries;renderChoices();renderTabs();}).catch(()=>{preferences.querySelector('p').textContent='Could not load dictionary choices. Restart the reader and refresh.';});
 })();

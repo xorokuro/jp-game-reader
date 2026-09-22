@@ -14,3 +14,19 @@ audio{color-scheme:dark;display:inline-block;width:185px;height:30px;vertical-al
 :is(#dictionary-dark-theme,body.mdict-entry) b,:is(#dictionary-dark-theme,body.mdict-entry) strong{color:#a9dfcc!important}
 :is(#dictionary-dark-theme,body.mdict-entry) ruby rt,:is(#dictionary-dark-theme,body.mdict-entry) sup,:is(#dictionary-dark-theme,body.mdict-entry) sub{font-size:.7em!important}
 :is(#dictionary-dark-theme,body.mdict-entry) .dictionary-source{font-size:14px!important;color:#b5c7d1!important}
+
+/* Light preset. dictionary.js stamps data-mode on this document's root so the
+   embedded entry matches the reader instead of staying a dark rectangle. */
+html[data-mode=light]{color-scheme:light}
+html[data-mode=light],html[data-mode=light] body{background:#fffdf8!important;color:#1f272b!important}
+html[data-mode=light] body *{border-color:#ddd5c6!important}
+html[data-mode=light] body a,html[data-mode=light] body a *,
+html[data-mode=light] :is(#dictionary-dark-theme,body.mdict-entry) a,
+html[data-mode=light] :is(#dictionary-dark-theme,body.mdict-entry) a *{color:#0d6a80!important}
+html[data-mode=light] :is(#dictionary-dark-theme,body.mdict-entry) b,
+html[data-mode=light] :is(#dictionary-dark-theme,body.mdict-entry) strong{color:#0a6349!important}
+html[data-mode=light] body .dictionary-source,
+html[data-mode=light] :is(#dictionary-dark-theme,body.mdict-entry) .dictionary-source{
+ color:#5f6b71!important;border-bottom-color:#ddd5c6}
+html[data-mode=light] ::selection{background:#ffe2a0!important;color:#1f272b!important}
+html[data-mode=light] audio{color-scheme:light}

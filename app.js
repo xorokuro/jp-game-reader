@@ -1,9 +1,9 @@
 'use strict';const $=id=>document.getElementById(id);let rows=[],filtered=[],page=0,version=-1,paused=true,settingsLoaded=false,selected=new Set(),stopped=false,translationFields=false,currentId=null;
 let total=0,resultCount=0,loadToken=0,currentRecord=null,liveRecord=null,following=true,navSeq=null,recent=[];const selectionCache=new Map();
 let fullFrameRetryToken=null;
-try{fullFrameRetryToken=JSON.parse(sessionStorage.getItem('fullFrameRetryToken')||'null');}catch(_){}
+let startupBlank=true,startupLastSignature;
+try{sessionStorage.removeItem('fullFrameRetryToken');sessionStorage.removeItem('journalPin');}catch(_){}
 function rememberFullFrameRetry(token){fullFrameRetryToken=token;if(token===null)sessionStorage.removeItem('fullFrameRetryToken');else sessionStorage.setItem('fullFrameRetryToken',JSON.stringify(token));}
-try{const pin=JSON.parse(sessionStorage.getItem('journalPin')||'null');if(pin){following=false;currentId=pin.id;navSeq=pin.seq;}}catch(_){}
 const E=(tag,text)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;return e};
 async function api(path,body){const r=await fetch('/api/'+path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const data=await r.json();if(!r.ok)throw Error(data.error||'Request failed');return data}
 function msg(t){$('message').textContent=t}
@@ -21,7 +21,7 @@ async function loadPage(){
 }
 function render(){filtered=rows;$('sentences').replaceChildren();$('count').textContent=`${total.toLocaleString()} unique sentences saved`;$('page').textContent=`${resultCount} results · Page ${page+1} / ${Math.max(1,Math.ceil(resultCount/20))}`;$('prev').disabled=page===0;$('next').disabled=(page+1)*20>=resultCount;
 
-for(const row of filtered){const card=E('article'),head=E('div'),label=E('label'),check=E('input');card.id='entry-'+row.id;head.className='rowhead';check.type='checkbox';check.checked=selected.has(row.id);check.onchange=()=>{if(check.checked){selected.add(row.id);selectionCache.set(row.id,row);}else{selected.delete(row.id);selectionCache.delete(row.id);}selectionStatus()};label.append(check,document.createTextNode(' Select #'+row.id));const meta=E('span',`${row.kind==='corpus'?'Script match · '+Math.round(row.confidence*100)+'%':row.kind==='ocr'?'Check OCR':'Manually added'} · Seen ${row.encounters}×`);meta.className='meta';head.append(label,meta);card.append(head);const text=E('textarea');text.className='japanese';text.value=row.japanese;text.lang='ja';text.setAttribute('aria-label','Japanese sentence '+row.id);card.append(text);const time=E('div',`First: ${row.first_seen} · Last: ${row.last_seen}${row.source_id?' · '+row.source_id:''}`);time.className='meta';card.append(time);const en=E('textarea'),zh=E('textarea');en.value=row.english||'';zh.value=row.traditional_chinese||'';en.placeholder='Paste the final English translation';zh.placeholder='貼上繁體中文翻譯';en.lang='en';zh.lang='zh-Hant';en.setAttribute('aria-label','English translation '+row.id);zh.setAttribute('aria-label','Traditional Chinese translation '+row.id);card.append(E('h2','English'),en,E('h2','繁體中文 · Traditional Chinese'),zh);const note=E('textarea');note.value=row.note;note.placeholder='Your grammar notes, English meaning, or questions';note.setAttribute('aria-label','Study notes '+row.id);card.append(note);const bar=E('div');bar.className='toolbar';const save=E('button','Save entry');save.onclick=()=>action(async()=>{if(!translationFields)throw Error('Restart the recorder once to enable translation storage. Copy any unsaved edits first.');await api('edit',{id:row.id,japanese:text.value,note:note.value,english:en.value,traditional_chinese:zh.value});row.japanese=text.value;row.note=note.value;row.english=en.value;row.traditional_chinese=zh.value;msg('Saved to disk.');card.dataset.dirty='false'});for(const field of [text,note,en,zh])field.oninput=()=>card.dataset.dirty='true';const star=E('button',row.starred?'★ Starred':'☆ Star');star.onclick=()=>action(async()=>{await api('edit',{id:row.id,starred:!row.starred});row.starred=!row.starred;star.textContent=row.starred?'★ Starred':'☆ Star'});const studied=E('button',row.studied?'✓ Studied':'Mark studied');studied.onclick=()=>action(async()=>{await api('edit',{id:row.id,studied:!row.studied});row.studied=!row.studied;studied.textContent=row.studied?'✓ Studied':'Mark studied'});const cp=E('button','Copy sentence');cp.onclick=()=>action(()=>copy(text.value));const study=E('button','Copy study prompt · EN + 繁中');study.onclick=()=>action(()=>copy(studyPrompt([{...row,japanese:text.value,note:note.value}])));const view=E('button','在主卡片開啟');view.onclick=()=>action(async()=>{if(dirty())throw Error('請先儲存編輯內容。');following=false;navSeq=null;showCurrent(await api('sentence?id='+row.id));rememberPin();document.querySelector('.current').scrollIntoView({behavior:'smooth'});});const remove=E('button','移除這筆文字');remove.onclick=()=>action(()=>removeSentence(row.id));bar.append(remove,view,sendButton('只傳日文',()=>text.value),sendButton('日文＋學習 prompt',()=>studyPrompt([{...row,japanese:text.value,note:note.value}])),save,star,studied,cp,study);card.append(bar);card.append(translationImport(row,card,text,note,en,zh));$('sentences').append(card)}selectionStatus()}
+for(const row of filtered){const card=E('article'),head=E('div'),label=E('label'),check=E('input');card.id='entry-'+row.id;head.className='rowhead';check.type='checkbox';check.checked=selected.has(row.id);check.onchange=()=>{if(check.checked){selected.add(row.id);selectionCache.set(row.id,row);}else{selected.delete(row.id);selectionCache.delete(row.id);}selectionStatus()};label.append(check,document.createTextNode(' Select #'+row.id));const meta=E('span',`${row.kind==='corpus'?'Script match · '+Math.round(row.confidence*100)+'%':row.kind==='ocr'?'Check OCR':'Manually added'} · Seen ${row.encounters}×`);meta.className='meta';head.append(label,meta);card.append(head);const text=E('textarea');text.className='japanese';text.value=row.japanese;text.lang='ja';text.setAttribute('aria-label','Japanese sentence '+row.id);card.append(text);const time=E('div',`First: ${row.first_seen} · Last: ${row.last_seen}${row.source_id?' · '+row.source_id:''}`);time.className='meta';card.append(time);const en=E('textarea'),zh=E('textarea');en.value=row.english||'';zh.value=row.traditional_chinese||'';en.placeholder='Paste the final English translation';zh.placeholder='貼上繁體中文翻譯';en.lang='en';zh.lang='zh-Hant';en.setAttribute('aria-label','English translation '+row.id);zh.setAttribute('aria-label','Traditional Chinese translation '+row.id);card.append(E('h2','English'),en,E('h2','繁體中文 · Traditional Chinese'),zh);const note=E('textarea');note.value=row.note;note.placeholder='Your grammar notes, English meaning, or questions';note.setAttribute('aria-label','Study notes '+row.id);card.append(note);const bar=E('div');bar.className='toolbar';const save=E('button','Save entry');save.onclick=()=>action(async()=>{if(!translationFields)throw Error('Restart the recorder once to enable translation storage. Copy any unsaved edits first.');await api('edit',{id:row.id,japanese:text.value,note:note.value,english:en.value,traditional_chinese:zh.value});row.japanese=text.value;row.note=note.value;row.english=en.value;row.traditional_chinese=zh.value;msg('Saved to disk.');card.dataset.dirty='false'});for(const field of [text,note,en,zh])field.oninput=()=>card.dataset.dirty='true';const star=E('button',row.starred?'★ Starred':'☆ Star');star.onclick=()=>action(async()=>{await api('edit',{id:row.id,starred:!row.starred});row.starred=!row.starred;star.textContent=row.starred?'★ Starred':'☆ Star'});const studied=E('button',row.studied?'✓ Studied':'Mark studied');studied.onclick=()=>action(async()=>{await api('edit',{id:row.id,studied:!row.studied});row.studied=!row.studied;studied.textContent=row.studied?'✓ Studied':'Mark studied'});const cp=E('button','Copy sentence');cp.onclick=()=>action(()=>copy(text.value));const study=E('button','Copy study prompt · EN + 繁中');study.onclick=()=>action(()=>copy(studyPrompt([{...row,japanese:text.value,note:note.value}])));const view=E('button','在主卡片開啟');view.onclick=()=>action(async()=>{if(dirty())throw Error('請先儲存編輯內容。');following=false;navSeq=null;showCurrent(await api('sentence?id='+row.id));rememberPin();document.querySelector('.current').scrollIntoView({behavior:'smooth'});});const remove=E('button','移除這筆文字');remove.onclick=()=>action(()=>removeSentence(row.id));bar.append(remove,view,sendButton('日文解析 · ChatGPT',()=>text.value),claudeButton(()=>text.value),save,star,studied,cp,study);card.append(bar);card.append(translationImport(row,card,text,note,en,zh));$('sentences').append(card)}selectionStatus()}
 
 const OCR_READING_GUIDANCE="OCR 解讀原則（適用於下方所有解析與片語對照）：這些日文來自遊戲畫面的 OCR，可能漏字、誤認漢字或假名、缺少濁點、標點或斷句，也可能混入角色名字。不要把辨識結果一字不差地當成正確原文。先根據提供的上下文、日文文法與常見搭配，推斷最可能的原句；有明確依據時直接採用最小必要修正，接著解析、翻譯並用下括弧統整該推定版本，不必先要求我手動修改。若有實質修正，先用一行「OCR 推定修正：原片段 → 推定片段（簡短理由）」清楚標示。修正版是推定，不能聲稱已核對遊戲原文。若有兩種同樣合理的讀法，簡短列出差異並說明本次採用哪一種；資訊不足時保留缺字或不確定處，不要憑空補整段台詞或猜故事。不要把方言、古語或角色特殊語氣一律改成標準日文。後面的「保留原句」指保留這個已標示的推定版本及其文法關係；沒有錯誤跡象就照原文解析。\n\n";
 function japaneseAnalysisPrompt(text){
@@ -54,7 +54,7 @@ function sendButton(label,payload){
   button.dataset.chatgptPayload='';
   const source=payload();
   if(!source?.trim()){msg('目前沒有可傳送的句子。');return;}
-  const value=label==='只傳日文'?japaneseAnalysisPrompt(source):source;
+  const value=label==='日文解析 · ChatGPT'?japaneseAnalysisPrompt(source):source;
   if(currentSend.contains(button)){following=false;rememberPin();updateNavigation();}
   if(document.documentElement.dataset.chatgptHelper!=='ready'){
    $('prepared').value=value;$('promptbox').open=true;
@@ -67,10 +67,21 @@ function sendButton(label,payload){
  };
  return button;
 }
+function claudeButton(payload){
+ const button=E('button','只傳日文');button.title='將與 ChatGPT 相同的日文解析 prompt 帶入 Claude';button.dataset.destination='claude';
+ button.onclick=async()=>{
+  const source=payload();if(!source?.trim()){msg('目前沒有可傳送的句子。');return;}
+  const text=japaneseAnalysisPrompt(source);
+  if(currentSend.contains(button)){following=false;rememberPin();updateNavigation();}
+  $('prepared').value=text;
+  window.open('https://claude.ai/new?q='+encodeURIComponent(text),'_blank','noopener');
+  try{await navigator.clipboard.writeText(text);msg('已將日文與解析 prompt 帶入 Claude，請在 Claude 確認並送出。完整內容也已複製備用。');}
+  catch{ $('promptbox').open=true;msg('已將日文與解析 prompt 帶入 Claude，請確認並送出。若未帶入，可複製下方完整內容。'); }
+ };
+ return button;
+}
 const currentSend=E('div');currentSend.className='toolbar';
-currentSend.append(sendButton('只傳日文',()=>currentId?$('latest').textContent:''),sendButton('日文＋學習 prompt',()=>{
- return currentRecord?studyPrompt([currentRecord]):'';
-}));
+currentSend.append(sendButton('日文解析 · ChatGPT',()=>currentId?$('latest').textContent:''),claudeButton(()=>currentId?$('latest').textContent:''));
 const copyJapanese=E('button','複製日文');copyJapanese.id='copy-current-japanese';copyJapanese.type='button';
 const copyJapaneseStatus=E('span');copyJapaneseStatus.setAttribute('role','status');
 copyJapanese.onclick=()=>action(async()=>{
@@ -156,18 +167,15 @@ fullScreenOcr.onclick=()=>requestOcr(true);
 $('pause').onclick=()=>action(async()=>{await api('pause',{paused:!paused});paused=!paused;$('pause').textContent=paused?'開啟自動辨識':'停止自動辨識' });
 $('backup').onclick=()=>action(async()=>{const b=await api('backup',{});msg('Database backup saved in your journal backups folder: '+b.file)});
 $('export').onclick=()=>{location.href='/api/export?format=json'};$('exporttxt').onclick=()=>{location.href='/api/export?format=txt'};
-async function openPastedText(translate=false){
+async function openPastedText(source,translate=false){
  if(dirty())throw Error('Save your edits first.');
- const source=$('manual').value;
  if(!source.trim())throw Error('Paste Japanese text first.');
  const result=await api('add',{japanese:source});
  following=false;navSeq=null;showCurrent(result.row);rememberPin();await loadPage();
- $('paste-status').textContent='Saved. Highlight a word in the reading panel for automatic lookup.';
+ $('paste-status').textContent=result.row.temporary?'Temporary text · not saved. Select a word to search.':'Saved. Select a word to search.';
  if(translate){await api('local-translate',{id:result.row.id});$('paste-status').textContent='Saved and queued for local translation.';}
- document.querySelector('.current').scrollIntoView({behavior:'smooth',block:'start'});
  return result.row;
 }
-$('add').onclick=()=>action(()=>openPastedText());
 $('settings').onclick=()=>action(async()=>{await api('settings',{process:'obs64',crop_top:Number($('top').value)/100,crop_height:Number($('height').value)/100});msg('Capture area updated. Watch the recognized text to check it.')});
 $('stop').onclick=()=>action(async()=>{if(dirty())throw Error('Save your edited notes before stopping.');await api('stop',{});stopped=true;$('status').textContent='Reader closed. Your texts remain saved.';$('pause').disabled=true;msg('Saved. Use Start Reader.cmd to reopen your library.')});
 window.addEventListener('beforeunload',e=>{if(dirty()){e.preventDefault();e.returnValue=''}});
@@ -183,20 +191,21 @@ const removeCurrent=E('button','移除這筆文字');removeCurrent.onclick=()=>a
 
 function rememberPin(){if(following)sessionStorage.removeItem('journalPin');else if(currentId)sessionStorage.setItem('journalPin',JSON.stringify({id:currentId,seq:navSeq}));}
 function setReaderText(id,text){const node=$(id);if(node.textContent!==text)node.textContent=text;}
-function readerSelectionActive(){const selection=window.getSelection();return selection&&!selection.isCollapsed&&['latest','latestenglish','latestchinese'].some(id=>{const node=$(id);return node.contains(selection.anchorNode)||node.contains(selection.focusNode);});}
+function readerSelectionActive(){if(document.activeElement===$('latest'))return true;const selection=window.getSelection();return selection&&!selection.isCollapsed&&['latest','latestenglish','latestchinese'].some(id=>{const node=$(id);return node.contains(selection.anchorNode)||node.contains(selection.focusNode);});}
 function showCurrent(row){
- if(!row){currentId=null;currentRecord=null;currentImportId=null;$('latest').textContent='目前沒有句子';$('latestenglish').textContent='';$('latestchinese').textContent='';$('latestmeta').textContent='';$('currentimport').replaceChildren();updateNavigation();return;}currentRecord=row;currentId=row.id;updateCurrentImport(row);
+ if(row)startupBlank=false;
+ if(!row){currentId=null;currentRecord=null;currentImportId=null;$('latest').textContent='';$('latestenglish').textContent='';$('latestchinese').textContent='';$('latestmeta').textContent='';$('currentimport').replaceChildren();updateNavigation();return;}currentRecord=row;currentId=row.id;updateCurrentImport(row);
  setReaderText('latest',row.japanese.replace(/<br\s*\/?>/gi,'\n'));
  setReaderText('latestenglish',row.english||'尚未翻譯，複製 ChatGPT JSON 後按下方貼上按鈕。');
  setReaderText('latestchinese',row.traditional_chinese||'尚未翻譯');
- $('latestmeta').textContent=`Journal #${row.id} · ${row.kind==='ocr'?'OCR 待校對':'貼上文字／手動紀錄'} · ${row.last_seen}`;
+ $('latestmeta').textContent=row.temporary?'Temporary text · not saved':`Journal #${row.id} · ${row.kind==='ocr'?'OCR 待校對':'貼上文字／手動紀錄'} · ${row.last_seen}`;
  updateNavigation();
 }
 function updateNavigation(){
- $('reader-mode').textContent=following?'顯示最新文字':`回看中 · #${currentId||''}（新文字不會蓋掉這篇）`;
+ $('reader-mode').textContent=startupBlank&&!currentId?'貼上日文開始閱讀':following?'顯示最新文字':`回看中 · #${currentId||''}（新文字不會蓋掉這篇）`;
  $('sentence-prev').disabled=!navSeq;
  $('sentence-next').disabled=!navSeq||navSeq===recent[0]?.seq;
- $('sentence-live').disabled=following;
+ $('sentence-live').disabled=following&&!startupBlank;
  const previous=$('recent-lines').value;
  $('recent-lines').replaceChildren();
  const placeholder=E('option','最近讀到的句子：點選回看');placeholder.value='';$('recent-lines').append(placeholder);
@@ -256,6 +265,9 @@ async function poll(){
   $('export-status').textContent=s.exports?.error?'資料庫已保存；JSON 匯出暫時失敗：'+s.exports.error:s.exports?.pending?'資料庫已立即保存 · JSON／文字備份將於 30 秒內背景更新':'資料庫已保存 · JSON／文字備份更新：'+(s.exports?.updated_at||'準備中');
   if(!settingsLoaded){$('top').value=Math.round(s.settings.crop_top*100);$('height').value=Math.round(s.settings.crop_height*100);settingsLoaded=true;}
   recent=s.recent||[];liveRecord=s.last;
+  const lastSignature=JSON.stringify([liveRecord?.id,liveRecord?.japanese,liveRecord?.last_seen]);
+  if(startupLastSignature===undefined)startupLastSignature=lastSignature;
+  else if(lastSignature!==startupLastSignature)startupBlank=false;
   if(!dirty()&&!readerSelectionActive()){
    if(fullFrameRetryToken!==null&&!s.retry?.pending){
     if(s.retry?.deadline===fullFrameRetryToken&&s.retry.result_id){
@@ -264,8 +276,8 @@ async function poll(){
     }
     rememberFullFrameRetry(null);
    }
-   if(following){navSeq=recent[0]?.seq;showCurrent(liveRecord);}
-   else if(currentId&&(!currentRecord||s.version!==version)){const row=await api('sentence?id='+currentId);if(row)showCurrent(row);else{following=true;navSeq=recent[0]?.seq;rememberPin();showCurrent(liveRecord);}}
+   if(following&&!startupBlank){navSeq=recent[0]?.seq;showCurrent(liveRecord);}
+   else if(currentId&&!currentRecord?.localDraft&&(!currentRecord||s.version!==version)){const row=await api('sentence?id='+currentId);if(row)showCurrent(row);else{following=true;navSeq=recent[0]?.seq;rememberPin();showCurrent(liveRecord);}}
    updateNavigation();
    if(s.version!==version){await loadPage();if(!dirty())version=s.version;}
   }
@@ -282,7 +294,12 @@ poll();
 // Appearance is browser-local and never modifies journal entries.
 (()=>{
  const key='dimension-journal-theme-v1';
- const defaults={page:'#101719',card:'#17221f',field:'#101c17',button:'#203b33',hue:158,jp:28,translation:23,spacing:1.8,width:1100,radius:16};
+ // Two curated presets; every other control edits a copy of one of them.
+ const modes={
+  dark:{page:'#0e1316',card:'#161e22',field:'#0b1013',button:'#1e2a2e',hue:166},
+  light:{page:'#f2efe8',card:'#fffdf8',field:'#f7f4ec',button:'#e7e1d4',hue:172},
+ };
+ const defaults={...modes.dark,jp:28,translation:23,spacing:1.85,width:1120,radius:18};
  let theme={...defaults};
  const limits={hue:[0,360],jp:[18,46],translation:[16,36],spacing:[1.3,2.4],width:[760,1600],radius:[0,30]};
  try{const saved=JSON.parse(localStorage.getItem(key)||'null');if(saved){for(const k of ['page','card','field','button'])if(/^#[0-9a-f]{6}$/i.test(saved[k]))theme[k]=saved[k];for(const [k,[min,max]] of Object.entries(limits))if(Number.isFinite(saved[k]))theme[k]=Math.max(min,Math.min(max,saved[k]));}}catch{}
@@ -299,9 +316,13 @@ poll();
   surface.style.setProperty('background-color',theme.page,'important');
   surface.style.setProperty('color',foreground(theme.page),'important');
  }
- root.style.colorScheme=luminance(theme.page)<.18?'dark':'light';
+ const darkPage=foreground(theme.page)==='#ffffff';
+ root.style.colorScheme=darkPage?'dark':'light';
+ root.dataset.mode=darkPage?'dark':'light';
  syncBackground();
  syncPanel();
+ syncMode();
+ document.dispatchEvent(new CustomEvent('readerthemechange',{detail:{mode:root.dataset.mode}}));
  for(const [k,v] of Object.entries({'jp-size':theme.jp+'px','translation-size':theme.translation+'px','line-space':theme.spacing,'reader-width':theme.width+'px',rounding:theme.radius+'px'}))root.style.setProperty('--'+k,v);
  if(save)try{localStorage.setItem(key,JSON.stringify(theme));document.getElementById('theme-save').textContent='✓ 外觀已自動儲存';}catch{document.getElementById('theme-save').textContent='目前可預覽，但瀏覽器無法保存設定。';}}
  const make=(tag,text)=>{const e=document.createElement(tag);if(text)e.textContent=text;return e};
@@ -362,7 +383,10 @@ poll();
  for(const [name,color] of [['深綠','#101719'],['石板灰','#2d3443'],['午夜藍','#111827'],['墨綠','#2d4043'],['暖灰','#49443f'],['暖紙色','#eee6d8'],['奶油白','#fffaf0'],['鼠尾草','#dfe8dd'],['薰衣草','#e9e4f2'],['霧藍','#dce7ef'],['白色','#ffffff'],['黑色','#000000']]){
   const swatch=make('button');swatch.type='button';swatch.className='panel-swatch';swatch.dataset.color=color;swatch.style.backgroundColor=color;swatch.style.color=foreground(color);swatch.textContent='✓';swatch.title=name+' '+color;swatch.setAttribute('aria-label',name+' '+color);swatch.onclick=()=>setPanel(color);panelSwatches.append(swatch);
  }
- const presets=[['原本深綠',defaults],['午夜藍',{page:'#111827',card:'#1e293b',field:'#0f172a',button:'#334155',hue:205}],['暖紙色',{page:'#eee6d8',card:'#fffaf0',field:'#f4ead9',button:'#dfc7a5',hue:25}],['薰衣草',{page:'#e9e4f2',card:'#faf6ff',field:'#e9dff5',button:'#d1bce8',hue:275}],['純黑',{page:'#000000',card:'#101010',field:'#181818',button:'#292929',hue:158}]];
+ function matchesMode(name){return ['page','card','field','button'].every(k=>theme[k]===modes[name][k])}
+ function syncMode(){for(const name of ['light','dark']){const button=document.getElementById('mode-'+name);if(button)button.setAttribute('aria-pressed',String(matchesMode(name)));}}
+ for(const name of ['light','dark'])document.getElementById('mode-'+name)?.addEventListener('click',()=>{theme={...theme,...modes[name]};apply();build()});
+ const presets=[['☀️ 淺色 Light',modes.light],['🌙 深色 Dark',modes.dark],['原本深綠',{page:'#101719',card:'#17221f',field:'#101c17',button:'#203b33',hue:158}],['午夜藍',{page:'#111827',card:'#1e293b',field:'#0f172a',button:'#334155',hue:205}],['暖紙色',{page:'#eee6d8',card:'#fffaf0',field:'#f4ead9',button:'#dfc7a5',hue:25}],['薰衣草',{page:'#e9e4f2',card:'#faf6ff',field:'#e9dff5',button:'#d1bce8',hue:275}],['純黑',{page:'#000000',card:'#101010',field:'#181818',button:'#292929',hue:158}]];
  for(const [name,values] of presets){const b=make('button',name);b.type='button';b.onclick=()=>{theme={...theme,...values};apply();build()};document.getElementById('theme-presets').append(b);}
  document.getElementById('theme-reset').onclick=()=>{theme={...defaults};apply();build()};apply(false);build();
 })();

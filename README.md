@@ -16,8 +16,20 @@ dictionary files, imported once. The Windows Argos runtime is not bundled in iOS
 
 1. Copy the entire **Japanese Reader Portable** folder to your Windows laptop.
 2. Double-click **Start Reader.cmd**.
-3. Paste Japanese and click **Open text for reading**. Highlight a word in the
-   reading panel to search the included dictionaries automatically.
+3. Click the Japanese reading box to type or paste text directly, or use
+   **Paste Japanese here** to replace the whole block. Highlight a word to search.
+4. Text is temporary by default. To retain pasted text, enable **Save pasted /
+   recognized text to library** and click **Save this text**. The toggle also controls
+   whether new OCR text is retained and starts off each time the server starts.
+5. Check the dictionaries to search. Only checked dictionaries have order numbers;
+   newly checked dictionaries go last. Edit a number to change their saved order.
+   Results are grouped by dictionary with clickable headwords and available readings.
+   Click a headword for one full definition, then **All dictionary results** to return.
+   Ctrl+Z / Ctrl+Shift+Z navigates search history outside editable fields.
+
+Library backups, exports and saved-text history are under the collapsed **Library
+tools** section. Temporary browser edits disappear on reload; temporary OCR text
+is held in server memory until the reader closes. Existing saved entries stay intact.
 
 No Python, OBS, LM Studio, browser extension or administrator installation is
 needed for reading, dictionary lookup, notes, saved translations and prompt creation.
@@ -29,7 +41,7 @@ Keep the complete folder together; dictionary paths remain valid after moving it
 
 Open **Translation engine · 翻譯引擎**, choose an engine and model/package, then
 click **Use selection**. Your engine selection is saved with the reading library.
-Paste text and click **Open + translate locally**, or translate the current saved text.
+Save the current text to the library, then use **Translate this text** for local translation.
 
 - **Argos Translate · offline CPU:** bundled in the updated personal portable folder.
   Requires no LM Studio, LLM, GPU, installation or internet on the destination PC.
