@@ -21,7 +21,7 @@ enum ReaderMetrics {
     static let cardRadius: CGFloat = 18
     static let innerRadius: CGFloat = 13
     static let gutter: CGFloat = 16
-    static let stack: CGFloat = 13
+    static let stack: CGFloat = 12
 }
 
 // MARK: - Surfaces
