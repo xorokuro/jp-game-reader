@@ -14,7 +14,7 @@ import WebKit
                 continuation.resume(throwing: NSError(domain: "SelectionTest", code: 1, userInfo: [NSLocalizedDescriptionKey: "WebKit evaluation timed out"]))
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: timeout)
-            view.evaluateJavaScript(script) { value, error in
+            DictionaryPage.evaluateSelectionScript(script, in: view) { value, error in
                 guard !completed else { return }
                 completed = true; timeout.cancel()
                 if let error { continuation.resume(throwing: error) }
@@ -28,6 +28,7 @@ import WebKit
             window = UIWindow(windowScene: scene)
         } else { window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844)) }
         let controller = UIViewController()
+        window.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
         window.rootViewController = controller
         view.frame = CGRect(x: 0, y: 80, width: 390, height: 500)
         controller.view.addSubview(view)

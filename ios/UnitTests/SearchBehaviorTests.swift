@@ -3,6 +3,23 @@ import SQLite3
 @testable import JapaneseReader
 
 @MainActor final class SearchBehaviorTests: XCTestCase {
+    func testUncompressedDictionaryPreviewAndGlobalSwitcher() async throws {
+        let root = UITestFixture.documents()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let model = ReaderModel(documents: root)
+        try await settle(model)
+        model.searchScope = "base:DEMO_A"
+        model.word = "みほん"
+        model.search(dismissKeyboard: false)
+        try await settle(model)
+        XCTAssertEqual(model.hits.count, 2)
+        let first = try XCTUnwrap(model.hits.first)
+        XCTAssertTrue(first.preview.contains("見本"))
+        model.open(first)
+        try await settle(model)
+        XCTAssertTrue(model.entryHTML.contains("見本"))
+        XCTAssertEqual(Set(model.entryMatches.map(\.code)), Set(["DEMO_A", "DEMO_B"]))
+    }
     private func fixture() throws -> (ReaderModel, URL, String) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let dictionaries = root.appendingPathComponent("dictionaries")

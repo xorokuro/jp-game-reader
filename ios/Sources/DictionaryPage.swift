@@ -37,6 +37,9 @@ struct DictionaryPage: UIViewRepresentable {
         """
     }
     static let selectionWorld = WKContentWorld.world(name: "JapaneseReaderSelection")
+    static func evaluateSelectionScript(_ script: String, in view: WKWebView, completion: @escaping (Any?, Error?) -> Void) {
+        JPReaderEvaluate(view, script, completion)
+    }
     static let selectionScript = """
     (() => {
         let pending, previous = "";

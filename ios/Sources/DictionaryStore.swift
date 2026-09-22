@@ -138,7 +138,7 @@ final class DictionaryStore {
             let mode = UInt32(bytes[0]) | UInt32(bytes[1]) << 8 | UInt32(bytes[2]) << 16 | UInt32(bytes[3]) << 24
             let checksum = UInt32(bytes[4]) << 24 | UInt32(bytes[5]) << 16 | UInt32(bytes[6]) << 8 | UInt32(bytes[7])
             var decoded: Data
-            if mode == 0 { decoded = raw.dropFirst(8) }
+            if mode == 0 { decoded = Data(raw.dropFirst(8)) }
             else if mode == 2 {
                 decoded = Data(count: expected)
                 var length = uLongf(expected)
