@@ -1,5 +1,10 @@
 # Working on this reader
 
+- The user prohibits GitHub Actions usage because their included minutes are exhausted.
+  Do not enable, dispatch, rerun, or add automatic workflow triggers. Keep changes
+  code-only or validate locally; do not use a paid cloud build substitute. Any future
+  Actions usage requires new explicit user authorization. Use [skip ci] on code commits.
+
 This is the shared base for Japanese learning across pasted text, books, articles and games. Read README.md and
 ROADMAP.md before changing it. Keep paste-first reading and offline dictionaries usable without OBS or LM Studio.
 Extend this application with profiles and adapters;

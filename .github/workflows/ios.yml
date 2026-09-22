@@ -1,11 +1,8 @@
 name: Build iPhone app
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'ios/**'
-      - '.github/workflows/ios.yml'
+# Disabled in repository settings at the user's request. Do not enable or
+# dispatch this workflow without new explicit authorization for Actions usage.
 permissions:
   contents: read
 jobs:
