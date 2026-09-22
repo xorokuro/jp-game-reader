@@ -45,6 +45,7 @@ import WebKit
         let second = expectation(description: "adjusted selection searched")
         var calls = 0
         let coordinator = SelectableJapanese.Coordinator { word in
+            guard !word.isEmpty else { return }
             model.searchSelection(word)
             calls += 1
             if calls == 1 { first.fulfill() } else if calls == 2 { second.fulfill() }
@@ -73,6 +74,7 @@ import WebKit
         let second = expectation(description: "dictionary range adjusted")
         var calls = 0
         let coordinator = DictionaryPage.Coordinator(root: model.dictionaryRoot, code: "TEST") { word in
+            guard !word.isEmpty else { return }
             model.searchSelection(word)
             calls += 1
             if calls == 1 { first.fulfill() } else if calls == 2 { second.fulfill() }

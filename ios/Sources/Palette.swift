@@ -22,11 +22,11 @@ enum Palette {
         UIColor(color).getRed(&r, green: &g, blue: &b, alpha: &a)
         return (Int((r * 255).rounded()) << 16) | (Int((g * 255).rounded()) << 8) | Int((b * 255).rounded())
     }
-    static func accessibleAccent(_ rgb: Int, dark: Bool) -> Color {
+    static func accessibleAccent(_ rgb: Int, dark: Bool, backgroundRGB: Int? = nil) -> Color {
         var c = channels(rgb)
         // Check against white in light mode and a raised dark surface (#2C2C2E)
         // in dark mode, so accent text remains readable on system surfaces.
-        let background = dark ? luminance(channels(0x2C2C2E)) : 1
+        let background = backgroundRGB.map { luminance(channels($0)) } ?? (dark ? luminance(channels(0x2C2C2E)) : 1)
         for _ in 0..<100 {
             let l = luminance(c)
             if (max(l, background) + 0.05) / (min(l, background) + 0.05) >= 4.8 { break }

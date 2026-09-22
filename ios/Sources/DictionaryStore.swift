@@ -14,6 +14,7 @@ struct DictionaryHit: Identifiable {
     let code: String
     let dictionary: String
     let word: String
+    var preview: String = ""
 }
 
 // Every database operation is performed on the model's serial worker queue.
@@ -88,10 +89,26 @@ final class DictionaryStore {
             let code = dictionary["code"]!
             guard let file = try query("SELECT id FROM files WHERE code=? AND kind='.mdx'", [code]).first?["id"] else { continue }
             let rows = try query("SELECT id,word FROM records WHERE file=? AND norm=? LIMIT 30", [file, key])
-            let prefix = rows.isEmpty ? try query("SELECT id,word FROM records WHERE file=? AND norm>? AND norm<? ORDER BY norm,id LIMIT 12", [file, key, key + "\u{10ffff}"]) : []
-            hits += (rows + prefix).map { DictionaryHit(id: Int64($0["id"]!)!, root: root, code: code, dictionary: dictionary["name"]!, word: $0["word"]!) }
+            let prefix = try query("SELECT id,word FROM records WHERE file=? AND norm>? AND norm<? ORDER BY norm,id LIMIT 12", [file, key, key + "\u{10ffff}"])
+            hits += (rows + prefix).map { row in
+                var hit = DictionaryHit(id: Int64(row["id"]!)!, root: root, code: code, dictionary: dictionary["name"]!, word: row["word"]!)
+                // A missing preview must never hide an otherwise usable match.
+                if let body = try? entry(hit) { hit.preview = Self.preview(body) }
+                return hit
+            }
         }
         return hits
+    }
+    static func preview(_ html: String) -> String {
+        let clean = html.replacingOccurrences(of: "(?is)<(script|style|rt)\\b[^>]*>.*?</\\1>", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "&nbsp;", with: " ")
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(clean.prefix(140))
     }
     private func path(_ relative: String) throws -> URL {
         guard !relative.contains(":"), !relative.hasPrefix("/"), !relative.split(separator: "/").contains("..") else { throw ReaderError("Unsafe dictionary path.") }

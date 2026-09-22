@@ -6,6 +6,8 @@ struct DictionaryPage: UIViewRepresentable {
     let html: String
     let root: URL
     let code: String
+    var paperRGB: Int? = nil
+    var followLink: ((String) -> Void)? = nil
     let lookup: (String) -> Void
     static func audioLinks(_ source: String) -> String {
         guard let pattern = try? NSRegularExpression(pattern: "(?is)<a\\b[^>]*href=[\"']sound://([^\"']+)[\"'][^>]*>.*?</a>") else { return source }
@@ -39,7 +41,7 @@ struct DictionaryPage: UIViewRepresentable {
         document.addEventListener("selectionchange", () => {
             clearTimeout(pending);
             const text = window.getSelection()?.toString().trim() || "";
-            if (!text || Array.from(text).length > 80) { previous = ""; return; }
+            if (!text || Array.from(text).length > 40) { previous = ""; window.webkit.messageHandlers.readerSelection.postMessage(""); return; }
             pending = setTimeout(() => {
                 const current = window.getSelection()?.toString().trim() || "";
                 if (current !== text || current === previous) return;
@@ -49,7 +51,7 @@ struct DictionaryPage: UIViewRepresentable {
         });
     })();
     """
-    func makeCoordinator() -> Coordinator { Coordinator(root: root, code: code, lookup: lookup) }
+    func makeCoordinator() -> Coordinator { Coordinator(root: root, code: code, followLink: followLink, lookup: lookup) }
     static func makeWebView(html: String, coordinator: Coordinator) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = false
@@ -66,7 +68,14 @@ struct DictionaryPage: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView { Self.makeWebView(html: html, coordinator: context.coordinator) }
     // Search results update the surrounding SwiftUI view. Never reload the document
     // here: that would discard the native selection handles and scroll position.
-    func updateUIView(_ view: WKWebView, context: Context) {}
+    func updateUIView(_ view: WKWebView, context: Context) {
+        context.coordinator.lookup = lookup
+        context.coordinator.followLink = followLink
+        view.backgroundColor = paperRGB.map { UIColor(Palette.color($0)) } ?? .systemBackground
+        view.scrollView.backgroundColor = view.backgroundColor
+        context.coordinator.paperRGB = paperRGB
+        context.coordinator.applyPaper(view)
+    }
     static func dismantleUIView(_ view: WKWebView, coordinator: Coordinator) {
         view.configuration.userContentController.removeScriptMessageHandler(forName: "readerSelection", contentWorld: selectionWorld)
         view.stopLoading()
@@ -74,15 +83,28 @@ struct DictionaryPage: UIViewRepresentable {
     final class Coordinator: NSObject, WKURLSchemeHandler, WKNavigationDelegate, WKScriptMessageHandler {
         let root: URL
         let code: String
-        let lookup: (String) -> Void
+        var lookup: (String) -> Void
+        var followLink: ((String) -> Void)?
+        var paperRGB: Int?
+        func applyPaper(_ view: WKWebView) {
+            let css: String
+            if let rgb = paperRGB {
+                let hex = String(format: "#%06X", rgb & 0xFFFFFF)
+                let ink = Palette.luminance(Palette.channels(rgb)) < 0.179 ? "#ffffff" : "#000000"
+                css = "html,body{background:\(hex)!important;color:\(ink)!important}body *{background-color:transparent!important;color:inherit!important}a{text-decoration:underline!important}"
+            } else { css = "" }
+            let script = "(() => {let s=document.getElementById('reader-palette');if(!s){s=document.createElement('style');s.id='reader-palette';document.head.appendChild(s);}s.textContent='\(css)';})()"
+            view.evaluateJavaScript(script, in: nil, in: DictionaryPage.selectionWorld, completionHandler: nil)
+        }
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { applyPaper(webView) }
         let queue = DispatchQueue(label: "JapaneseReader.media")
         var cancelled = Set<ObjectIdentifier>()
-        init(root: URL, code: String, lookup: @escaping (String) -> Void) { self.root = root; self.code = code; self.lookup = lookup }
+        init(root: URL, code: String, followLink: ((String) -> Void)? = nil, lookup: @escaping (String) -> Void) { self.root = root; self.code = code; self.lookup = lookup; self.followLink = followLink }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard message.name == "readerSelection", message.frameInfo.isMainFrame,
                   let text = message.body as? String else { return }
             let word = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !word.isEmpty, word.count <= 40 else { return }
+            guard word.count <= 40 else { return }
             lookup(word)
         }
         func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
@@ -108,7 +130,7 @@ struct DictionaryPage: UIViewRepresentable {
             guard let url = action.request.url else { decisionHandler(.cancel); return }
             if url.scheme == "entry" {
                 let value = String(url.absoluteString.dropFirst("entry://".count)).components(separatedBy: "#")[0].removingPercentEncoding ?? ""
-                lookup(value); decisionHandler(.cancel)
+                (followLink ?? lookup)(value); decisionHandler(.cancel)
             } else if action.navigationType == .other && (url.scheme == "about" || url.scheme == "jpread") { decisionHandler(.allow) }
             else { decisionHandler(.cancel) }
         }

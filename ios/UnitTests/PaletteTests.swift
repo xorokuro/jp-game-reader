@@ -2,6 +2,16 @@ import XCTest
 @testable import JapaneseReader
 
 final class PaletteTests: XCTestCase {
+    func testAccentOnCustomBackgrounds() {
+        for paperRGB in [0x000000, 0xFFFFFF, 0x1F7A73, 0x777777, 0xFFCC88] {
+            let paper = Palette.luminance(Palette.channels(paperRGB))
+            for accentRGB in [0x000000, 0xFFFFFF, 0x1F7A73, 0x777777] {
+                let color = Palette.accessibleAccent(accentRGB, dark: paper < 0.179, backgroundRGB: paperRGB)
+                let accent = Palette.luminance(Palette.channels(Palette.rgb(color)))
+                XCTAssertGreaterThanOrEqual((max(paper, accent) + 0.05) / (min(paper, accent) + 0.05), 4.49)
+            }
+        }
+    }
     func testContrastAcrossPalette() {
         for r in stride(from: 0, through: 255, by: 51) {
             for g in stride(from: 0, through: 255, by: 51) {

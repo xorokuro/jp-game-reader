@@ -1,6 +1,21 @@
 import XCTest
 
 final class ReaderUITests: XCTestCase {
+    func testSearchFocusSelectAllAndReturnToReader() {
+        let app = XCUIApplication()
+        app.launch()
+        app.tabBars.buttons["Search"].tap()
+        let field = app.textFields["dictionarySearchField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        field.typeText("previous")
+        app.buttons["Back to Main Page"].tap()
+        XCTAssertTrue(app.textViews["passageEditor"].waitForExistence(timeout: 5))
+        app.tabBars.buttons["Search"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        field.typeText("next")
+        XCTAssertEqual(field.value as? String, "next", "Reentering Search selects all existing text")
+    }
     func testPasteButton() {
         let app = XCUIApplication()
         app.launch()
@@ -37,8 +52,12 @@ final class ReaderUITests: XCTestCase {
         keyboardShot.name = "Visible passage with keyboard"
         keyboardShot.lifetime = .keepAlways
         add(keyboardShot)
-        app.buttons["openPassage"].tap()
         XCTAssertEqual(app.switches["autoSavePassages"].value as? String, "0")
+        app.buttons["openPassage"].tap()
+        let reading = app.textViews["selectablePassage"]
+        XCTAssertTrue(reading.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(reading.frame.height, app.frame.height * 0.5)
+        XCTAssertFalse(app.textFields["dictionarySearchField"].exists)
         app.tabBars.buttons["Library"].tap()
         XCTAssertTrue(app.staticTexts["emptyLibrary"].waitForExistence(timeout: 10))
         app.terminate()
@@ -87,7 +106,7 @@ final class ReaderUITests: XCTestCase {
         XCTAssertFalse(app.buttons["Keep this temporary"].exists)
         app.terminate(); app.launch()
         XCTAssertEqual(app.switches["autoSavePassages"].value as? String, "0")
-        app.tabBars.buttons["Look up"].tap()
+        app.tabBars.buttons["Search"].tap()
         let search = app.textFields["Search Japanese…"]
         search.tap(); search.typeText("test")
         app.buttons["Search dictionaries"].tap()

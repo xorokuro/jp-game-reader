@@ -44,8 +44,9 @@ Apple's limits: https://developer.apple.com/help/account/basics/about-your-devel
 ## Use
 
 Paste into **Read → Paste / edit**, tap **Read**, then long-press/select Japanese
-in **Read / select words**. Matches appear underneath; tap one for its definition.
-You can also type a word in **Look up**. Search supports exact matches and prefix
+in **Read / select words**. A matching selection opens a full-screen results list;
+tap a result for its definition. You can also type a word in **Search**.
+Search supports exact matches and prefix
 suggestions, not Japanese conjugation analysis: try the dictionary form if needed.
 
 **Auto-save passages** defaults to **off**. Pasted text stays temporary until you
@@ -99,9 +100,41 @@ media playback still require testing on the user's iPhone.
 A system Paste button inserts clipboard text without opening the keyboard. The reading screen scrolls, keeps a 220-point editor, and uses a compact title. Read and Done are available above the keyboard. Install the updated IPA over the existing app with the same Apple account to preserve dictionaries and saved passages.
 
 ### Colors and dictionary choices
-Library → Colors & contrast offers any accent color and an optional custom reading background. Reading text chooses black/white for contrast; accent links adjust for system light/dark surfaces. Dictionary entry HTML retains its own styles.
+Library → Colors & contrast offers any accent color and an optional custom app background. Reading text chooses black/white for contrast; accent links adjust for system light/dark surfaces. Custom backgrounds also apply to dictionary entry pages, with contrasting text; images retain their original colors.
 
 Library offers per-dictionary toggles and Edit → drag handles for lookup order. Preferences persist. Add dictionary pack imports another indexed folder alongside existing dictionaries, without replacing or redownloading them. Packs contain mdict-index.sqlite3 plus their referenced source files; raw MDX/MDD alone are not yet indexed on the phone. Use export_dictionary_pack.py to export a single dictionary from a portable indexed collection. Extract its ZIP in Files, then select dictionary-pack using Add dictionary pack.
 
 ## Version 1.3
 Automatic selection lookup no longer resigns the reader's first responder. Adjusting a highlight searches the new selection while keeping its handles. Dictionary entry pages also support selection lookup, with results below the original page. Selection-triggered searches do not dismiss or reload the entry; opening a result explicitly navigates to that entry.
+
+## Reader and dictionary navigation update
+
+- **Read → Auto-search selected words** and **Library → Dictionary search →
+  Auto-search inside all dictionaries** are independent, remembered settings.
+  Both default to on, including upgrades where these preferences do not yet exist.
+- Selecting up to 40 characters waits briefly for selection to settle, then searches
+  enabled dictionaries. Exact matches appear first, followed by prefix matches.
+  With no match, stay on the original page. With auto-search off, highlight text
+  and use **Search selected text**. Tapped dictionary links always search explicitly.
+- Results are grouped in dictionary order, with headwords, displayed-result counts,
+  and short entry-text previews (including kanji when present in the entry).
+  Previews are plain text, not replicas of dictionary typography or icons.
+  A failed preview does not remove its match. Each dictionary displays up to
+  30 exact matches and 12 additional prefix matches.
+- Reading mode fills the available screen. Results no longer occupy a small panel
+  below Reader or definitions. **Back to Main Page** returns to Reader; opening
+  lookup from Reader keeps the reading view mounted underneath. **Results** leaves
+  an entry for its results; **Back** closes the lookup flow.
+- Manually entering **Search** focuses the field and selects its existing text.
+  Selection-triggered result lists do not automatically open the keyboard.
+- Search prefers an installed Japanese keyboard using public UIKit APIs. Enable
+  **Japanese – Romaji** in iOS Settings → General → Keyboard → Keyboards.
+  Public APIs expose language, not an exact Kana/Romaji layout selector; the exact
+  layout and keyboard switching require physical-device verification.
+- **Custom app background** colors Reader, Search, Library, navigation/tab bars,
+  and dictionary page backgrounds. Text and accent contrast adapt to that color.
+
+Validation for this update: source syntax can be checked on Windows, but Xcode
+build, simulator tests, and physical iPhone checks must run on macOS/device before
+calling this update a verified installable release. The existing build workflow
+runs the expanded synthetic engine, selection, palette, and interface tests.
