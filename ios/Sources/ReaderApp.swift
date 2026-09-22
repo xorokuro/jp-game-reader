@@ -75,9 +75,9 @@ struct LookupSnapshot {
     var entryOffsets: [UUID: CGPoint] = [:]
     var readerOffset: CGPoint = .zero
     private var liveSearch: DispatchWorkItem?
-    func typedSearch(_ query: String) {
+    func typedSearch(_ query: String, clearSelection: Bool = false) {
         cancelPendingSearch()
-        readerSelection = ""; dictionarySelection = ""
+        if clearSelection { readerSelection = ""; dictionarySelection = "" }
         word = query
         hits = []
         status = ""
@@ -448,7 +448,7 @@ struct ReaderHome: View {
                     Button("Library") { dismissKeyboard(); selectedTab = 2 }.accessibilityIdentifier("keyboardLibraryTab")
                     Spacer()
                     Button("Done") { dismissKeyboard() }.accessibilityIdentifier("dismissKeyboard")
-                }.font(.subheadline).padding(.horizontal).frame(minHeight: 44).background(paper)
+                }.font(.subheadline).padding(.horizontal).frame(minHeight: 44).background(paper).background(KeyboardControlArea())
                     .overlay(alignment: .top) { Divider() }
             }
         }
@@ -491,12 +491,12 @@ struct ReaderHome: View {
                         Text("Paste Japanese from another app").font(.caption).foregroundStyle(.secondary)
                     }
                     Text("Paste a passage. Select a word to look it up.").font(.subheadline).foregroundStyle(.secondary)
-                    Toggle("Auto-search selected words", isOn: $model.readerAutoSearch).accessibilityIdentifier("readerAutoSearch")
-                    Toggle("Auto-save passages", isOn: $model.autoSave).accessibilityIdentifier("autoSavePassages")
+                    Toggle("Auto-search selected words", isOn: $model.readerAutoSearch).background(KeyboardControlArea()).accessibilityIdentifier("readerAutoSearch")
+                    Toggle("Auto-save passages", isOn: $model.autoSave).background(KeyboardControlArea()).accessibilityIdentifier("autoSavePassages")
                     Text(model.autoSave ? "Saved when you tap Read. Your choice is remembered." : "Off: pasted text stays temporary unless you tap Save.").font(.caption).foregroundStyle(.secondary)
                     Picker("Reading mode", selection: $editing) {
                         Text("Paste / edit").tag(true); Text("Read / select words").tag(false)
-                    }.pickerStyle(.segmented)
+                    }.pickerStyle(.segmented).background(KeyboardControlArea())
                     TextEditor(text: $model.text).scrollContentBackground(.hidden).foregroundStyle(ink).background(paper).font(.system(size: 21)).focused($passageFocused).frame(height: 220).accessibilityIdentifier("passageEditor").overlay(RoundedRectangle(cornerRadius: 12).stroke(.secondary.opacity(0.3)))
                     HStack {
                         if !passageFocused { Button("Read") { read() }.buttonStyle(.borderedProminent).tint(Palette.color(accentRGB)).foregroundStyle(Palette.ink(accentRGB)).accessibilityIdentifier("openPassage") }
@@ -509,7 +509,7 @@ struct ReaderHome: View {
                 }.padding()
                 }.scrollDismissesKeyboard(.interactively)
                 } else {
-                    Toggle("Auto-search selected words", isOn: $model.readerAutoSearch).padding(.horizontal).accessibilityIdentifier("readerAutoSearch")
+                    Toggle("Auto-search selected words", isOn: $model.readerAutoSearch).padding(.horizontal).background(KeyboardControlArea()).accessibilityIdentifier("readerAutoSearch")
                     SelectableJapanese(text: model.text, ink: UIColor(ink), paper: UIColor(paper), initialOffset: model.readerOffset, saveOffset: { model.readerOffset = $0 }) { word in
                         guard !model.showingLookup, selectedTab == 0 else { return }
                         model.select(word, inDictionary: false)
@@ -712,7 +712,7 @@ struct ReaderHome: View {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 JapaneseSearchField(text: $model.word, focusRequest: searchFocusRequest,
                                     active: focusSearch && selectedTab == 1 && !model.showingEntry,
-                                    ink: UIColor(ink), changed: { model.typedSearch($0) }) { model.search() }.frame(height: 36)
+                                    ink: UIColor(ink), changed: { model.typedSearch($0, clearSelection: true) }) { model.search() }.frame(height: 36)
                 if model.lookupBusy { ProgressView() }
                 Button { model.search() } label: { Image(systemName: "arrow.right.circle") }.accessibilityLabel("Search dictionaries")
             }.padding(.horizontal, 10).background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
@@ -738,7 +738,7 @@ struct ReaderHome: View {
         Button { model.searchScope = id; model.typedSearch(model.word) } label: {
             Text(name).font(.caption).padding(.horizontal, 10).padding(.vertical, 7)
                 .background(model.searchScope == id ? accent.opacity(0.18) : .clear, in: Capsule())
-        }.foregroundStyle(ink).accessibilityIdentifier("searchScope_" + id)
+        }.foregroundStyle(ink).background(KeyboardControlArea()).accessibilityIdentifier("searchScope_" + id)
     }
     private func resultGroups(_ hits: [DictionaryHit], switching: Bool = false) -> some View {
         List {
