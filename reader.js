@@ -178,16 +178,20 @@
  function align(){
   pending=false;
   let nextReading=0,nextDictionary=0;
-  if(desktop.matches&&!dictionary.hidden&&workspace.querySelector('.reading-disclosure').open&&dictionary.querySelector('.dictionary-disclosure').open){
+  const readingOpen=workspace.querySelector('.reading-disclosure').open;
+  const companionSpace=document.getElementById('reader-companion-art')?340:0;
+  if(desktop.matches&&readingOpen)nextReading=companionSpace;
+  if(desktop.matches&&!dictionary.hidden&&readingOpen&&dictionary.querySelector('.dictionary-disclosure').open){
    const readingTop=reading.getBoundingClientRect().top-readingOffset;
    const dictionaryTop=frame.getBoundingClientRect().top-dictionaryOffset;
-   nextReading=Math.max(0,dictionaryTop-readingTop);
-   nextDictionary=Math.max(0,readingTop-dictionaryTop);
+   nextReading=Math.max(companionSpace,dictionaryTop-readingTop);
+   nextDictionary=Math.max(0,readingTop+nextReading-dictionaryTop);
   }
   if(Math.abs(nextReading-readingOffset)>.5||Math.abs(nextDictionary-dictionaryOffset)>.5){
    readingOffset=nextReading;dictionaryOffset=nextDictionary;
    workspace.style.setProperty('--reading-top-offset',readingOffset+'px');
    workspace.style.setProperty('--dictionary-top-offset',dictionaryOffset+'px');
+   workspace.dispatchEvent(new Event('reader-layout-aligned'));
   }
  }
  function schedule(){if(!pending){pending=true;requestAnimationFrame(align);}}
@@ -203,5 +207,110 @@
   schedule();
  });
  document.fonts.ready.then(schedule);
+ schedule();
+})();
+
+// Decorative companions occupy only the existing desktop alignment gap.
+(() => {
+ const data=document.getElementById('reader-companion-art');
+ if(!data)return;
+ const assets=JSON.parse(data.textContent),workspace=$('reader-workspace');
+ const reading=$('latest'),host=reading.closest('.reading-disclosure');
+ const key='reader-companions-v1',reduce=matchMedia('(prefers-reduced-motion: reduce)');
+ let saved={};try{saved=JSON.parse(localStorage.getItem(key)||'{}')||{};}catch{}
+ const prefs={hidden:!!saved.hidden,paused:typeof saved.paused==='boolean'?saved.paused:reduce.matches,
+  size:Math.min(140,Math.max(60,Number(saved.size)||100)),selected:Array.isArray(saved.selected)?saved.selected:assets.map(a=>a.id),positions:saved.positions||{}};
+ function save(){try{localStorage.setItem(key,JSON.stringify(prefs));}catch{}}
+ const stage=E('section');stage.id='reader-companions';stage.setAttribute('aria-label','Character companions');stage.hidden=true;
+ const controls=E('div');controls.className='companion-controls';
+ const title=E('span','Reading companions');title.className='companion-title';
+ const pause=E('button'),hide=E('button'),choose=E('button','Artwork credits'),reset=E('button','Reset positions');
+ for(const b of [pause,hide,choose,reset])b.type='button';
+ const size=E('input');size.type='range';size.min=60;size.max=140;size.value=prefs.size;size.setAttribute('aria-label','Character size');
+ const options=E('div');options.className='companion-options';options.id='companion-options';options.hidden=true;
+ choose.setAttribute('aria-controls',options.id);choose.setAttribute('aria-expanded','false');
+ const cast=E('div');cast.className='companion-cast';
+ const hint=E('span','Drag to arrange · arrow keys to move');hint.className='companion-hint';
+ controls.append(title,pause,hide,choose,size,reset);stage.append(controls,options,cast,hint);reading.before(stage);
+ const choices=E('div');choices.className='companion-choices';choices.setAttribute('role','group');choices.setAttribute('aria-label','Show or hide individual characters');
+ choices.append(E('span','Show:'));controls.append(choices);
+ const people=[];
+ for(const [i,a] of assets.entries()){
+  const label=E('label'),check=E('input');check.type='checkbox';check.checked=prefs.selected.includes(a.id);
+  label.append(check,document.createTextNode(a.name));choices.append(label);
+  check.onchange=()=>{prefs.selected=assets.filter(item=>item.id===a.id?check.checked:prefs.selected.includes(item.id)).map(item=>item.id);prefs.positions={};if(check.checked)prefs.hidden=false;save();layout();};
+  const person=E('button');person.type='button';person.className='companion-person';person.dataset.character=a.id;
+  person.setAttribute('aria-label',a.name+' — drag or use arrow keys to move');person.title=a.name;
+  const art=E('span');art.className='companion-art';art.style.animationDelay=(-i*1.3)+'s';
+  art.style.animationDuration=(5.2+i*.45)+'s';
+  // SVG viewBox clips the source page's transparent margins without modifying artwork.
+  const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');
+  svg.setAttribute('viewBox',a.box.join(' '));svg.setAttribute('aria-hidden','true');
+  const img=document.createElementNS(ns,'image');img.setAttribute('href',a.image);img.setAttribute('width',a.width);img.setAttribute('height',a.height);
+  if(a.clip){const defs=document.createElementNS(ns,'defs'),clip=document.createElementNS(ns,'clipPath'),poly=document.createElementNS(ns,'polygon');clip.id='companion-clip-'+a.id;poly.setAttribute('points',a.clip);clip.append(poly);defs.append(clip);svg.append(defs);img.setAttribute('clip-path','url(#'+clip.id+')');}
+  svg.append(img);art.append(svg);const caption=E('span',a.name);caption.className='companion-caption';person.append(art,caption);cast.append(person);
+  const state={a,person,art,index:i};people.push(state);
+  let drag=null;
+  person.onpointerdown=e=>{
+   if(e.button!==0)return;
+   person.focus({preventScroll:true});person.setPointerCapture(e.pointerId);
+   drag={x:e.clientX,y:e.clientY,left:person.offsetLeft,top:person.offsetTop};person.dataset.dragging='true';
+  };
+  function move(left,top){
+   const mx=Math.max(0,cast.clientWidth-person.offsetWidth),my=Math.max(0,cast.clientHeight-person.offsetHeight);
+   left=Math.max(0,Math.min(mx,left));top=Math.max(0,Math.min(my,top));
+   person.style.left=left+'px';person.style.top=top+'px';prefs.positions[a.id]={x:mx?left/mx:0,y:my?top/my:0};
+  }
+  person.onpointermove=e=>{if(drag)move(drag.left+e.clientX-drag.x,drag.top+e.clientY-drag.y);};
+  function finish(){if(!drag)return;drag=null;delete person.dataset.dragging;save();}
+  person.onpointerup=finish;person.onpointercancel=finish;person.onlostpointercapture=finish;
+  person.onkeydown=e=>{
+   if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))return;
+   e.preventDefault();const step=e.shiftKey?20:5;
+   move(person.offsetLeft+(e.key==='ArrowLeft'?-step:e.key==='ArrowRight'?step:0),person.offsetTop+(e.key==='ArrowUp'?-step:e.key==='ArrowDown'?step:0));save();
+  };
+ }
+ const credits=E('p');credits.className='companion-credits';credits.append(document.createTextNode('Artwork: '));
+ for(const [text,url] of [['STEINS;GATE ELITE','https://steinsgate.jp/elite/'],['Cosmic Princess Kaguya!','https://www.cho-kaguyahime.com/']]){const a=E('a',text);a.href=url;a.target='_blank';a.rel='noopener noreferrer';credits.append(a,document.createTextNode(' · '));}
+ credits.append(document.createTextNode('Portraits with gentle motion.'));options.append(credits);
+ pause.onclick=()=>{prefs.paused=!prefs.paused;save();layout();};
+ hide.onclick=()=>{prefs.hidden=!prefs.hidden;save();layout();};
+ choose.onclick=()=>{options.hidden=!options.hidden;choose.setAttribute('aria-expanded',String(!options.hidden));layout();};
+ reset.onclick=()=>{prefs.positions={};save();layout();};size.oninput=()=>{prefs.size=Number(size.value);save();layout();};
+ function layout(){
+  const offset=parseFloat(workspace.style.getPropertyValue('--reading-top-offset'))||0;
+  const desktop=matchMedia('(min-width:1100px)').matches;
+  stage.hidden=!host.open;
+  if(stage.hidden)return;
+  stage.style.top=desktop?(reading.getBoundingClientRect().top-host.getBoundingClientRect().top-offset+6)+'px':'auto';
+  stage.style.height=(desktop?Math.max(328,offset-12):340)+'px';
+  stage.dataset.paused=String(prefs.paused);pause.textContent=prefs.paused?'Resume':'Pause';pause.setAttribute('aria-pressed',String(prefs.paused));
+  hide.textContent=prefs.hidden?'Show characters':'Hide';hide.setAttribute('aria-pressed',String(prefs.hidden));
+  cast.hidden=hint.hidden=prefs.hidden;
+  const top=controls.offsetHeight+(options.hidden?0:options.offsetHeight)+12;
+  cast.style.top=top+'px';
+  const chosen=people.filter(p=>prefs.selected.includes(p.a.id));
+  // Equal-width slots keep character centres evenly spaced despite differing
+  // artwork widths. A shared height also keeps their feet on one baseline.
+  const slotWidth=cast.clientWidth/Math.max(1,chosen.length);
+  const widest=Math.max(1e-3,...chosen.map(p=>p.a.box[2]/p.a.box[3]));
+  const height=Math.max(0,Math.min(420*prefs.size/100,cast.clientHeight-30,slotWidth*.94/widest,slotWidth*.94/widest*prefs.size/100));
+  for(const p of people){
+   p.person.hidden=!chosen.includes(p);if(p.person.hidden)continue;
+   const ratio=p.a.box[2]/p.a.box[3];
+   const width=height*ratio,fullHeight=height+22;
+   p.person.style.width=width+'px';p.person.style.height=fullHeight+'px';p.art.style.height=height+'px';
+   const mx=Math.max(0,cast.clientWidth-width),my=Math.max(0,cast.clientHeight-fullHeight);
+   const pos=prefs.positions[p.a.id];
+   const x=pos&&Number.isFinite(pos.x)?Math.max(0,Math.min(1,pos.x))*mx:(chosen.indexOf(p)+.5)*slotWidth-width/2;
+   const y=pos&&Number.isFinite(pos.y)?Math.max(0,Math.min(1,pos.y))*my:my;
+   p.person.style.left=Math.max(0,Math.min(mx,x))+'px';p.person.style.top=y+'px';
+  }
+ }
+ let pending=false;function schedule(){if(!pending){pending=true;requestAnimationFrame(()=>{pending=false;layout();});}}
+ workspace.addEventListener('reader-layout-aligned',schedule);
+ const observer=new ResizeObserver(schedule);observer.observe(host);observer.observe(controls);observer.observe(options);
+ host.addEventListener('toggle',schedule);window.addEventListener('resize',schedule);
+ document.addEventListener('visibilitychange',()=>{stage.dataset.sleeping=String(document.hidden);});
  schedule();
 })();
