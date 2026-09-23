@@ -167,3 +167,41 @@
  const about=E('details');about.className='panel';about.append(E('summary','About Japanese Reader'),brand);shell.append(about);
  shell.prepend(workspace);
 })();
+
+// Keep the two content borders aligned as controls and dictionary tabs wrap.
+// Offsets are removed from measurements so resizing never accumulates spacing.
+(() => {
+ const workspace=$('reader-workspace'),reading=$('latest'),frame=$('dict-frame');
+ const dictionary=$('dictionary-panel');
+ const desktop=matchMedia('(min-width:1100px)');
+ let readingOffset=0,dictionaryOffset=0,pending=false;
+ function align(){
+  pending=false;
+  let nextReading=0,nextDictionary=0;
+  if(desktop.matches&&!dictionary.hidden&&workspace.querySelector('.reading-disclosure').open&&dictionary.querySelector('.dictionary-disclosure').open){
+   const readingTop=reading.getBoundingClientRect().top-readingOffset;
+   const dictionaryTop=frame.getBoundingClientRect().top-dictionaryOffset;
+   nextReading=Math.max(0,dictionaryTop-readingTop);
+   nextDictionary=Math.max(0,readingTop-dictionaryTop);
+  }
+  if(Math.abs(nextReading-readingOffset)>.5||Math.abs(nextDictionary-dictionaryOffset)>.5){
+   readingOffset=nextReading;dictionaryOffset=nextDictionary;
+   workspace.style.setProperty('--reading-top-offset',readingOffset+'px');
+   workspace.style.setProperty('--dictionary-top-offset',dictionaryOffset+'px');
+  }
+ }
+ function schedule(){if(!pending){pending=true;requestAnimationFrame(align);}}
+ const resize=new ResizeObserver(schedule);
+ resize.observe(workspace);
+ for(const element of workspace.querySelectorAll('.reading-disclosure > *, .dictionary-disclosure > *, #dict-entries'))resize.observe(element);
+ new MutationObserver(schedule).observe(workspace,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['open','hidden','class']});
+ window.addEventListener('resize',schedule);
+ desktop.addEventListener('change',()=>{
+  readingOffset=dictionaryOffset=0;
+  workspace.style.removeProperty('--reading-top-offset');
+  workspace.style.removeProperty('--dictionary-top-offset');
+  schedule();
+ });
+ document.fonts.ready.then(schedule);
+ schedule();
+})();

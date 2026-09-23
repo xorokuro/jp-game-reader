@@ -127,7 +127,15 @@ html,body{overflow-anchor:none}
  #reader-workspace{align-items:stretch}
  #reader-workspace>section.current{position:static;top:auto;align-self:stretch}
  #reader-workspace>#dictionary-panel{align-self:stretch}
- #reader-workspace #dict-frame{height:clamp(320px,45vh,600px)}
+ /* The open disclosure participates in the panel's flex layout so the
+    definition can use all remaining height, including a taller reader. */
+ #reader-workspace>#dictionary-panel{display:flex;flex-direction:column}
+ #dictionary-panel>.dictionary-disclosure[open]{display:contents}
+ #dictionary-panel>.dictionary-disclosure[open]::details-content{display:contents}
+ #reader-workspace .dict-layout{flex:1;grid-template-rows:auto minmax(clamp(640px,90vh,1200px),1fr);margin-top:var(--dictionary-top-offset,0px)}
+ #reader-workspace #dict-frame{height:100%;min-height:640px}
+ #reader-workspace #latest[contenteditable]{min-height:320px;margin-top:calc(18px + var(--reading-top-offset,0px))}
+ #reader-workspace .translation{min-height:160px}
  #reader-workspace>section.current:has(>.reading-disclosure:not([open])),
  #reader-workspace>#dictionary-panel:has(>.dictionary-disclosure:not([open])){align-self:start}
 }

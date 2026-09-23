@@ -96,7 +96,7 @@ body>*{position:relative;z-index:1}
  color:var(--page-fg,#e7f2ee)!important;
 }
 /* Give the reader room to sit beside an open dictionary. */
-body:has(#dictionary-panel:not([hidden])) .shell{max-width:min(1560px,100%)}
+body:has(#dictionary-panel:not([hidden])) .shell{max-width:100%}
 
 .app-header{
  position:sticky;top:0;z-index:20;
