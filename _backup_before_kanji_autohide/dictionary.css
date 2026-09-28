@@ -1,0 +1,199 @@
+/* ==========================================================================
+   Dictionary panel. Shares the colour tokens from style.css.
+   ========================================================================== */
+
+/* Result height changes must not move the outer page's reading position. */
+html,body{overflow-anchor:none}
+#dict-entries,#dict-choices,#dict-tabs{overscroll-behavior:contain}
+
+/* Reader + dictionary workspace ---------------------------------------------- */
+#reader-workspace{
+ /* Panel height: fills the window under the top bar by default; drag the grip to make it longer. */
+ --ws-fit:calc(100vh - var(--topbar-h,64px) - 40px);
+ --ws-h:var(--ws-custom-h,var(--ws-fit));
+ position:relative;display:grid;grid-template-columns:minmax(0,1fr);gap:26px;align-items:start;
+ scroll-margin-top:calc(var(--topbar-h,64px) + 10px);margin-top:6px;padding-bottom:18px;
+}
+#reader-workspace>*{min-width:0}
+#reader-workspace #dictionary-panel[hidden]{display:none}
+@media(min-width:1100px){
+ #reader-workspace:has(#dictionary-panel:not([hidden])){grid-template-columns:minmax(0,var(--ws-left,.94fr)) minmax(0,var(--ws-right,1.06fr))}
+ /* Both panels share one height, so the reading/script card and the dictionary end together. */
+ #reader-workspace #dictionary-panel{height:var(--ws-h);min-height:520px}
+}
+/* Resize grips: bottom edge (height) and the gap between panels (width). */
+.ws-grip{position:absolute;z-index:5;display:none;touch-action:none;user-select:none;background:none;border:0;padding:0;box-shadow:none;border-radius:0}
+.ws-grip:hover:not(:disabled),.ws-grip:focus-visible{background:none;transform:none;box-shadow:none}
+.ws-grip::after{content:"";position:absolute;border-radius:99px;background:var(--line-strong);transition:background-color .15s ease,transform .15s ease}
+.ws-grip:hover::after,.ws-grip.dragging::after,.ws-grip:focus-visible::after{background:var(--accent)}
+.ws-grip-h{left:0;right:0;bottom:0;height:18px;cursor:ns-resize}
+.ws-grip-h::after{left:50%;top:6px;width:92px;height:5px;transform:translateX(-50%)}
+.ws-grip-h:hover::after,.ws-grip-h.dragging::after{transform:translateX(-50%) scaleX(1.35)}
+.ws-grip-v{top:40px;bottom:40px;width:26px;cursor:ew-resize}
+.ws-grip-v::after{top:50%;left:10.5px;width:5px;height:84px;transform:translateY(-50%)}
+.ws-grip-v:hover::after,.ws-grip-v.dragging::after{transform:translateY(-50%) scaleY(1.35)}
+@media(min-width:1100px){
+ #reader-workspace:has(#dictionary-panel:not([hidden])) .ws-grip{display:block}
+}
+.ws-size-tip{
+ position:absolute;z-index:6;left:50%;bottom:22px;transform:translateX(-50%);padding:4px 12px;
+ font:650 12px var(--font-ui);color:var(--on-accent);background:var(--accent);border-radius:99px;pointer-events:none;
+}
+body.ws-resizing,body.ws-resizing *{user-select:none!important}
+body.ws-resizing iframe{pointer-events:none}
+
+/* Panel shell ------------------------------------------------------------------ */
+#dictionary-panel{
+ display:flex;flex-direction:column;
+ padding:16px clamp(12px,1.4vw,20px) clamp(12px,1.4vw,18px);
+ container-type:inline-size;
+}
+@media(max-width:1099px){#dictionary-panel{height:88vh;min-height:520px}}
+
+.dict-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.dict-title{display:flex;align-items:center;gap:12px;margin-right:auto;min-width:0}
+.dict-seal{
+ display:grid;place-items:center;flex:none;width:32px;height:32px;
+ font:700 17px/1 "UD Digi Kyokasho N-B","Yu Mincho",serif;color:var(--on-accent);
+ background:var(--accent);border-radius:9px 12px 8px 11px/12px 8px 11px 9px;
+ transform:rotate(-4deg);box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--on-accent) 30%,transparent);
+}
+.dict-title strong{display:block;font:700 16px/1.15 var(--font-hand);color:var(--ink)}
+.dict-word{display:block;font-family:var(--font-jp);font-size:15px;color:var(--accent-text);min-height:1.2em;max-width:36ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dict-word:not(:empty)::before{content:"「"}
+.dict-word:not(:empty)::after{content:"」"}
+.dict-toolbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.dict-zoom-controls{
+ display:inline-flex;align-items:center;gap:2px;padding:3px;
+ background:var(--inset);border:1.5px solid var(--line);border-radius:12px;
+}
+.dict-zoom-controls button{padding:5px 9px;font-size:12.5px;background:transparent;border-color:transparent;box-shadow:none}
+.dict-zoom-controls button:hover:not(:disabled){background:var(--inset-2);transform:none;box-shadow:none}
+.dict-zoom-controls .dict-font-toggle{min-width:30px;margin-left:2px;font:700 13.5px/1 "Yu Mincho","Noto Serif JP",serif;border-left:1.5px solid var(--line)!important;border-radius:0 9px 9px 0}
+
+/* Popovers (help, choose dictionaries) float over the panel instead of pushing it down. */
+.dict-pop{position:relative;margin:0!important;padding:0!important;border:0!important;background:none!important}
+.dict-pop>summary{display:grid;place-items:center;list-style:none;padding:8px;min-width:38px;min-height:38px;
+ color:var(--ink);background:var(--btn);border:1.5px solid var(--line-strong);border-radius:var(--wobble-sm);box-shadow:0 2px 0 var(--line-strong)}
+.dict-pop>summary::before{display:none}
+.dict-pop[open]>summary{background:var(--tint-accent);border-color:color-mix(in srgb,var(--accent) 50%,transparent)}
+.dict-pop-body{
+ position:absolute;right:0;top:calc(100% + 10px);z-index:30;
+ width:min(420px,80vw);max-height:62vh;overflow:auto;padding:16px 18px;
+ color:var(--ink);background:var(--card);
+ border:1.5px solid var(--line-strong);border-radius:var(--wobble-sm);box-shadow:var(--shadow),0 20px 40px -18px rgba(0,0,0,.35);
+ animation:pop-in .18s ease-out;
+}
+@keyframes pop-in{from{opacity:0;transform:translateY(-6px)}}
+.dict-pop-body>b{display:block;margin-bottom:6px;font-size:14px}
+.dict-pop-body .muted{font-size:13px;margin:8px 0}
+
+/* Search row ---------------------------------------------------------------------- */
+.dictionary-quick-search{margin:10px 0 0}
+.dictionary-quick-search .toolbar{display:flex;flex-wrap:nowrap;gap:6px;margin:0}
+.dictionary-quick-search #lookup-word{
+ flex:1;min-width:80px;padding:10px 14px 10px 38px;
+ font-family:var(--font-jp);font-size:17px;
+ background:var(--field) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M10.6 17.3c3.7.1 6.6-2.8 6.6-6.5 0-3.6-2.9-6.5-6.5-6.5C7 4.4 4.1 7.3 4.2 11c.1 3.5 2.9 6.3 6.4 6.3ZM15.6 15.8c1.5 1.4 2.9 2.9 4.3 4.5' fill='none' stroke='%23998b7e' stroke-width='1.9' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat 12px center/18px;
+}
+.dictionary-quick-search #lookup-back,.dictionary-quick-search #lookup-next{padding:8px;min-width:38px}
+.dictionary-quick-search #lookup-paste span{white-space:nowrap}
+#lookup-state{margin:6px 2px 0;font-size:12px;color:var(--muted)}
+.recent-words{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;overflow-x:auto;margin:6px 0 4px;padding:2px 2px 4px;scrollbar-width:none}
+.recent-words::-webkit-scrollbar{display:none}
+.recent-label{font-size:11.5px;font-weight:700;color:var(--faint);white-space:nowrap}
+.word-chip{
+ flex:none;padding:3px 11px;font:500 14px var(--font-jp);
+ background:var(--tint-3);border:1.2px solid color-mix(in srgb,var(--accent-3) 45%,transparent);
+ border-radius:999px;box-shadow:none;
+}
+.word-chip:nth-child(3n){background:var(--tint-2);border-color:color-mix(in srgb,var(--accent-2) 45%,transparent)}
+.word-chip:nth-child(3n+1){background:var(--tint-accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
+.word-chip:hover:not(:disabled){box-shadow:none}
+
+/* Body: dictionary index tabs on the left, the definition page on the right. ------ */
+.dict-body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(118px,164px) minmax(0,1fr);gap:12px}
+#dict-tabs{display:flex;flex-direction:column;gap:6px;min-height:0;overflow:auto;padding:2px 6px 8px 2px}
+.dict-tab{
+ display:flex;align-items:center;justify-content:space-between;gap:8px;flex:none;
+ padding:7px 9px 7px 11px;text-align:left;white-space:normal;
+ font-size:12.5px;font-weight:600;line-height:1.3;
+ background:var(--inset);border:1.5px solid var(--line);box-shadow:none;
+ border-radius:12px 6px 6px 12px/12px 8px 8px 12px;
+}
+.dict-tab:hover:not(:disabled){transform:translateX(3px);box-shadow:none}
+.dict-tab-count{
+ flex:none;min-width:22px;padding:1px 7px;text-align:center;
+ font:700 11.5px/1.5 var(--font-ui);color:var(--muted);
+ background:var(--card);border:1.2px solid var(--line);border-radius:99px;
+}
+.dict-tab.empty{opacity:.5;border-style:dashed}
+.dict-tab.error .dict-tab-count{color:#c0392b}
+.dict-tab.active{
+ color:var(--ink);background:var(--card);
+ border-color:color-mix(in srgb,var(--accent) 60%,transparent);
+ box-shadow:-4px 0 0 var(--accent) inset,0 2px 0 var(--line-strong);
+ transform:translateX(5px);
+}
+.dict-tab.active .dict-tab-count{color:var(--on-accent);background:var(--accent);border-color:transparent}
+/* Headwords of the active dictionary tuck under its tab. */
+#dict-entries{display:flex;flex-direction:column;gap:4px;margin:-2px 0 4px 16px;padding-left:10px;border-left:2px dotted color-mix(in srgb,var(--accent) 45%,transparent)}
+#dict-entries:empty,#dict-entries.single,#dict-entries.collapsed{display:none!important}
+.dict-tab.active:not(:has(+#dict-entries.single)):not(:has(+#dict-entries:empty))::after{
+ content:"";flex:none;width:6px;height:6px;margin-left:-2px;
+ border-right:2px solid currentColor;border-bottom:2px solid currentColor;opacity:.55;
+ transform:rotate(45deg) translateY(-2px);transition:transform .18s ease;
+}
+.dict-tab.active[aria-expanded="false"]::after{transform:rotate(-45deg)!important}
+#dict-entries button{
+ display:block;width:100%;padding:5px 9px;
+ font:500 13px/1.4 var(--font-jp);text-align:left;white-space:normal;
+ background:transparent;border:1.2px solid transparent;box-shadow:none;border-radius:8px;
+}
+#dict-entries button:hover:not(:disabled){background:var(--inset-2);transform:none;box-shadow:none}
+#dict-entries .active{background:var(--tint-accent);border-color:color-mix(in srgb,var(--accent) 40%,transparent);color:var(--ink)}
+#dict-tabs>#dict-entries:not(:has(button)){display:block;margin:6px 0;padding:0;border:0;font-size:12.5px;color:var(--muted)}
+
+.dict-main{display:flex;flex-direction:column;min-height:0;min-width:0}
+.dict-frame-wrap{position:relative;flex:1;min-height:280px}
+#dict-frame{
+ display:block;width:100%;height:100%;
+ background:var(--card);
+ border:1.5px solid var(--line-strong);
+ border-radius:var(--wobble-sm);
+ box-shadow:inset 0 2px 0 color-mix(in srgb,var(--ink) 4%,transparent);
+}
+.dict-empty{
+ position:absolute;inset:0;display:none;
+ flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;text-align:center;
+ color:var(--muted);background:color-mix(in srgb,var(--card) 70%,var(--paper));
+ border:1.5px dashed var(--line-strong);border-radius:var(--wobble-sm);
+}
+.dict-frame-wrap:has(#dict-frame:not([src])) .dict-empty{display:flex}
+.dict-empty svg{width:140px;height:auto;fill:none;stroke:var(--accent-2);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-bottom:6px}
+.dict-empty svg .twinkle{stroke:var(--accent-3);fill:color-mix(in srgb,var(--accent-3) 40%,transparent);transform-origin:98px 17px;animation:twinkle 2.4s ease-in-out infinite}
+@keyframes twinkle{50%{transform:scale(.7) rotate(20deg);opacity:.6}}
+.dict-empty b{font:700 18px var(--font-hand);color:var(--ink)}
+.dict-empty span{font-size:13px;max-width:34ch}
+
+/* Dictionary chooser (inside its popover) ----------------------------------------- */
+#dict-choices{display:grid;grid-template-columns:1fr;gap:4px;margin-top:10px}
+#dict-choices label{display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:550;cursor:pointer}
+.dict-choice-row{display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:10px;transition:background-color .15s ease}
+.dict-choice-row:hover{background:var(--inset-2)}
+.dict-choice-row label{flex:1;min-width:0}
+.dict-drag-handle{cursor:grab;touch-action:none;user-select:none;font-size:18px;line-height:1;padding:3px 8px;background:transparent;border-color:transparent;box-shadow:none;color:var(--faint)}
+.dict-drag-handle:hover:not(:disabled){background:var(--inset-2);color:var(--ink);transform:none;box-shadow:none}
+.dict-dragging{outline:2px dashed var(--accent);outline-offset:2px;background:var(--inset-2);opacity:.9}
+.dict-dragging .dict-drag-handle{cursor:grabbing}
+
+/* Narrow panels: tabs become a scrolling strip above the page. */
+@container (max-width:560px){
+ .dict-body{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}
+ #dict-tabs{flex-direction:row;overflow-x:auto;overflow-y:hidden;padding-bottom:6px}
+ .dict-tab{max-width:220px}
+ .dict-tab.active{transform:translateY(-2px)}
+ #dict-entries{flex-direction:row;margin:0;border-left:0;padding:0}
+ #dict-entries button{width:auto;white-space:nowrap}
+ .dictionary-quick-search #lookup-paste span{display:none}
+}

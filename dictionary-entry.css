@@ -1,0 +1,299 @@
+/* ==========================================================================
+   Dictionary entry page (injected into the sandboxed entry iframe).
+
+   Publisher markup keeps its own structure (indents, headword sizes, blocks);
+   this sheet only replaces colours and type so every dictionary reads like a
+   printed book: a serif face, a large headword, muted labels, and examples
+   set as an indented phrase line (--e-ex) with its translation underneath.
+
+   Colours arrive as --e-* variables (server: saved theme; reader page: live).
+   Roles:  --e-head headword · --e-ex example phrase · --e-num sense number
+           --e-muted labels/notes · --e-link cross-references
+   ========================================================================== */
+:root{
+ --e-bg:#fcfbf7;--e-fg:#262422;--e-muted:#777673;--e-link:#414844;--e-strong:#b0392e;--e-border:#d5d4d1;--e-sel:#deada7;
+ --e-ex:#23408e;--e-head:var(--e-fg);--e-num:var(--e-strong);
+ --e-serif:"Sitka Text","Charter","Bitstream Charter","Cambria","Georgia","Times New Roman","Yu Mincho","YuMincho","Hiragino Mincho ProN","Noto Serif JP","Noto Serif CJK JP","Microsoft JhengHei",serif;
+ --e-sans:"Segoe UI","Yu Gothic UI","Yu Gothic","Hiragino Kaku Gothic ProN","Noto Sans JP","Noto Sans CJK JP","Microsoft JhengHei",sans-serif;
+ --e-font:var(--e-serif);
+ --e-size:18px;
+ color-scheme:light;
+}
+:root[data-scheme="dark"]{--e-ex:#9ec2ff;color-scheme:dark}
+:root[data-font="sans"]{--e-font:var(--e-sans)}
+html,body{overscroll-behavior:contain;overflow-anchor:none}
+html,body{background:var(--e-bg)!important;color:var(--e-fg)!important}
+body{
+ margin:0!important;padding:18px clamp(16px,5vw,30px) 56px!important;
+ font:400 var(--e-size)/1.78 var(--e-font)!important;
+ overflow-wrap:anywhere;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+ font-kerning:normal;
+}
+body *{
+ color:inherit!important;background-color:transparent!important;background-image:none!important;
+ border-color:var(--e-border)!important;font-family:inherit!important;letter-spacing:normal!important;
+ text-shadow:none!important;box-shadow:none!important;
+}
+body :is(p,div,li,dd,dt,section){line-height:inherit!important}
+body a,body a *{color:var(--e-link)!important;text-decoration:underline!important;text-decoration-color:color-mix(in srgb,var(--e-link) 35%,transparent)!important;text-decoration-thickness:1px!important;text-underline-offset:3px}
+body a:hover{text-decoration-color:currentColor!important}
+body b,body strong{font-weight:700!important}
+body i,body em,body .em_italic{font-style:italic!important}
+body sup,body sub{font-size:.62em!important;line-height:0!important}
+body ruby rt{font-size:.55em!important}
+img{max-width:100%;height:auto}
+table{max-width:100%;border-collapse:collapse}
+td,th{padding:3px 8px;vertical-align:top}
+hr{border:0;border-top:1px solid var(--e-border)!important;margin:1em 0}
+::selection{background:var(--e-sel)!important;color:inherit!important}
+::-webkit-scrollbar{width:10px}
+::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--e-fg) 20%,transparent);border-radius:99px;border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-track{background:transparent}
+audio{color-scheme:inherit;display:inline-block;width:170px;height:30px;vertical-align:middle;margin:0 6px;border-radius:99px}
+
+/* Source line: which book this page is from. ---------------------------------------------- */
+body .dictionary-source{
+ display:flex;align-items:center;gap:10px;
+ margin:0 0 16px!important;padding:0 0 10px!important;
+ font:600 12px/1.5 var(--e-sans)!important;letter-spacing:.08em!important;
+ color:var(--e-muted)!important;border-bottom:1px solid var(--e-border)!important;
+}
+body .dictionary-source::before{content:"";flex:none;width:9px;height:9px;border-radius:2px;background:var(--e-num)!important;transform:rotate(45deg)}
+/* Publisher title bars repeat the source line. */
+body :is(.Header,.HeaderTitle,.entry-index,.mjrhsjcd-entry>.title,.tkbt-entry>.title,.cj3-duplicate-entry>.entry-index){display:none!important}
+body .Contents{margin:0!important}
+
+/* 1. Headwords -------------------------------------------------------------------------------- */
+body :is(.HeadG,.midashi,.item_midashi,.mjrhsjcd-entry>.head,.tkbt-entry>.head,.dic_item>.head,div.head:has(>h),h3,.dc-entry>.midashi){
+ display:block!important;margin:0 0 .35em!important;padding:0!important;line-height:1.35!important;
+}
+body :is(.HeadG .headword,.hw_midashi,.item_midashi .midashi,.midashi_kana,.titlekana,.dc-headword,.headword_kana,.mjrhsjcd-entry .word,.kanji01,headword,h3,.head>.かな,.headword>.reading){
+ font-size:1.55em!important;font-weight:700!important;color:var(--e-head)!important;letter-spacing:.01em!important;
+}
+body :is(.headword.表記,.m_hyoki,.hyouki_g,.headword_kanji,black_branckets,.hyouki_g *,.pinyin_h,.headword:not(.表記)~.headword){
+ font-size:1.2em!important;font-weight:400!important;color:var(--e-head)!important;margin-left:.15em;
+}
+body .Hsup{font-size:.5em!important;font-weight:600!important;vertical-align:super;color:var(--e-muted)!important;margin-left:.1em}
+body .headword_eng{display:block;margin-top:.15em;font-size:1.05em!important;font-weight:600!important;font-style:italic!important;color:var(--e-muted)!important}
+body :is(.pinyin_h,.mjrhsjcd-entry .type,.tkbt-entry .read,.tkbt-entry .readj){color:var(--e-muted)!important}
+body h3 .pinyin_h{font-size:.7em!important;margin-left:.5em}
+body .mjrhsjcd-entry .type{font:600 .72em var(--e-sans)!important;margin-left:.6em;padding:1px 7px;border:1px solid var(--e-border)!important;border-radius:6px;vertical-align:.2em}
+body .headword>.reading{margin-right:.25em}
+body .headword:has(>.reading){display:block;margin:0 0 .45em;font-size:1.1em!important}
+/* Saito puts the whole head line in one span. */
+
+/* 2. Senses, numbers and labels ---------------------------------------------------------------- */
+body :is(.meaning,.mean_eng,.mean_gogi,.gogi,.def1,.def2,.dc-line,.MeaningG>.meaning){margin-block:.2em!important}
+body :is(.MeaningG,.gogi,.mean_gogi,.meaning,.def1){margin-top:.55em!important}
+body :is(.num,.wc,.dc-sense,.fontredcolor,.sense_no,.gogi>.num,.MeaningG .Num,.snum){
+ color:var(--e-num)!important;font-weight:700!important;margin-right:.3em;
+}
+body :is(.slabel,.label,.naihou,.note_div,.shironuki,.daikubun,.tkbt-label,.type,.kg_eiyaku,.shiyouiki,.white-square,.hinshi,.bunya,.yoho,.gram){
+ color:var(--e-muted)!important;
+}
+body :is(.tkbt-label,.white-square,.mjrhsjcd-entry .type){font-family:var(--e-sans)!important}
+body :is(.tkbt-label,.white-square){font-size:.75em!important;font-weight:650!important;padding:1px 6px;margin-right:.4em;border:1px solid var(--e-border)!important;border-radius:6px;vertical-align:.12em}
+body :is(.tyuuki_g,.note,.chuui,.hosoku){color:var(--e-muted)!important;font-size:.92em!important}
+body :is(.pinyin,.mean_pinyin,.pinyin_box){color:var(--e-muted)!important;font-size:.82em!important;font-style:italic!important}
+body .pinyin_box{margin-left:.3em}
+body .kg_wake{display:none}
+body :is(.hatuon_g,.IPA){color:var(--e-muted)!important}
+body :is(.eng,.mean_yakugo,.yakugo,.dfcn){color:var(--e-fg)!important}
+body .mean_eng .eng,body .item_midashi~.meaning .eng{font-weight:600!important}
+body img:is(.sense_pat_mark_s,.sense_pat_mark_e,.img_sound){display:none}
+
+/* 3. Examples: phrase line in --e-ex, translation underneath. --------------------------------- */
+body :is(.MeaningG>.example,div.mean_yorei,.yoorei,.mean_yoreiyaku,.dic_item div.example,.dic_item>.example,.exam,.cj3-duplicate-entry .example,.body>.example,p[data-orgtag="example"],.examples>li.example-ja){
+ display:block!important;margin:calc(var(--e-size) * .5) 0 calc(var(--e-size) * .5) calc(var(--e-size) * 1.15)!important;padding:0!important;text-indent:0!important;
+}
+body :is(.用例,.scope_exam_jp,.reibun,span.mean_yorei,.dic_item div.example>span.example:first-of-type,.exjp,.ex_boby,.example_jp,jae,li.example-ja,x-none){
+ display:block!important;color:var(--e-ex)!important;
+}
+body :is(.用例訳,.scope_exam_en,.yakubun_g,.reiyaku_box,.dic_item div.example>span.example:nth-of-type(2),.excn,.exen,.ex_trans,.example_en,ja_cn,li.example-en){
+ display:block!important;color:var(--e-fg)!important;
+}
+body :is(.用例,.scope_exam_jp,.reibun,.exjp,.example_jp,jae,li.example-ja) :is(b,strong,.bi){color:inherit!important}
+body :is(.excn,.exen){font-size:.94em!important}
+body .exen{color:var(--e-muted)!important}
+body :is(.mj_yorei_sep,.kg_reiyaku_box,.kg_yoreiyaku,.example_mark,.sound_mark){display:none!important}
+body .yoorei{text-indent:0!important}
+body .yoorei>:is(.reibun){display:block!important}
+/* Wisdom marks examples with ●/▶ as text; keep them as a small hanging bullet. */
+body .yoorei{position:relative}
+body .examples{list-style:none;margin:.3em 0 0!important;padding:0!important}
+body .examples>li.example-en{margin:0 0 .55em 1.15em!important}
+body .mjrhsjcd-entry .exam{font-size:0}
+body .mjrhsjcd-entry .exam>*{font-size:var(--e-size)}
+body .mjrhsjcd-entry .dfjp{display:block;color:var(--e-fg)!important}
+body .mjrhsjcd-entry .dfcn{display:block;color:var(--e-muted)!important}
+body .mjrhsjcd-entry .def2{display:inline}
+body .tkbt-entry .phrases{margin-top:.6em}
+body .tkbt-entry .dfen{margin:.3em 0!important}
+body .tkbt-entry .dfen .dfcn{display:block;color:var(--e-muted)!important}
+body section.description p[data-orgtag="meaning"]{margin:.3em 0!important}
+
+/* 4. Cross-references and sections -------------------------------------------------------------- */
+body :is(.ref,.ref_item,.sansyou_g,.dc-xref,.canzhao){color:var(--e-link)!important}
+body :is(.SubItem,.ComplexG){margin-top:1.1em!important}
+body :is(.subheadword,.ComplexH){font-weight:700!important;color:var(--e-head)!important}
+body :is(.subheadword,.ComplexH)::before{content:"";display:inline-block;width:.5em;height:.5em;margin-right:.45em;border-radius:1px;background:var(--e-num)!important;transform:rotate(45deg) translateY(-.12em)}
+body details.import-source{display:block;margin:14px 0;padding:10px 14px!important;border:1px solid var(--e-border)!important;border-radius:10px}
+body details.import-source>summary{cursor:pointer;font:700 13px/1.6 var(--e-sans)!important;letter-spacing:.05em!important;color:var(--e-muted)!important}
+
+/* 5. NHK accent dictionary: pitch line and conjugation table read as cards. ----------------------- */
+body dic-item{display:block}
+body :is(accent_text,con_table>accent){display:inline-flex;align-items:center;gap:6px;font-size:1.25em!important;letter-spacing:.06em!important}
+body con_table{display:flex;flex-wrap:wrap;gap:8px;margin-top:.8em}
+body con_table>accent{font-size:1.02em!important;padding:4px 10px;border:1px solid var(--e-border)!important;border-radius:10px}
+body :is(symbol_backslash,symbol_macron){color:var(--e-num)!important;font-weight:700!important}
+
+/* 6. Dictionaries whose markup needs a nudge. ------------------------------------------------------ */
+body[data-dict="MDX_NEW_12ACC0F4"] .header{display:block;font-size:1.55em;font-weight:700;margin-bottom:.6em}
+body[data-dict="MDX_NEW_12ACC0F4"] img{display:block;margin:0 auto 12px;border-radius:6px;border:1px solid var(--e-border)}
+:root[data-scheme="dark"] body[data-dict="MDX_NEW_12ACC0F4"] img{filter:invert(.88) hue-rotate(180deg)}
+body .dc-half{font-size:1em!important}
+body .indent1{margin-left:.2em!important}
+body .indent2{margin-left:1.2em!important}
+body .indent3{margin-left:2.2em!important}
+
+/* Legacy selector kept for old cached pages. */
+#dictionary-dark-theme{font-family:var(--e-font)!important}
+
+/* Example blocks read tighter than running definitions. */
+body :is(.MeaningG>.example,div.mean_yorei,.yoorei,.mean_yoreiyaku,.dic_item div.example,.exam,.cj3-duplicate-entry .example,.body>.example,p[data-orgtag="example"],.examples>li){line-height:1.62!important}
+body :is(li.example-ja,li.example-en){font-size:1em!important}
+/* Wisdom writes ●/▶ as bare text before each example; hide it. */
+body .yoorei{font-size:0!important}
+body .yoorei>*{font-size:var(--e-size)!important}
+body .yoorei .yakubun_g *{font-size:1em!important}
+body .yoorei .tyuuki_g{font-size:.92em!important}
+/* Shogakukan v3 paints meanings with fixed colours. */
+body[data-dict] section.description :is(b,strong,span){color:var(--e-fg)!important}
+body[data-dict] section.description .white-square{color:var(--e-muted)!important}
+body[data-dict] section.description jae{color:var(--e-ex)!important}
+body .mean_reiyaku{color:var(--e-fg)!important}
+body span.mean_yorei *{color:inherit!important}
+
+/* 7. Yomitan dictionaries (yomitan_library.py) ------------------------------------------------------
+   Same book treatment: large headword with furigana, numbered senses in --e-num,
+   small sans labels for tags, examples in --e-ex. */
+body.yomitan-entry{--yt-pill:color-mix(in srgb,var(--e-fg) 5%,var(--e-bg))}
+body :is(.yt-tag,.yt-badge,.yt-freq,.yt-sublabel,.yt-rlabel,.yt-k,.yt-credit,.yt-ksec>summary){font-family:var(--e-sans)!important}
+
+/* Headword */
+body .yt-head{display:flex;align-items:flex-end;flex-wrap:wrap;gap:6px 14px;margin:0 0 .3em}
+body .yt-headword{margin:0!important;font-size:2em!important;font-weight:700!important;line-height:1.25!important;color:var(--e-head)!important;letter-spacing:.02em!important}
+body .yt-headword ruby rt{font-size:.42em!important;font-weight:500!important;color:var(--e-muted)!important;letter-spacing:.06em!important}
+body .yt-head-tags{display:flex;gap:4px;flex-wrap:wrap;padding-bottom:.45em}
+
+/* Tags */
+body .yt-tag{
+ display:inline-block;margin:0 .3em .15em 0;padding:0 .55em;
+ font-size:.7em!important;font-weight:650!important;line-height:1.75!important;letter-spacing:.02em!important;
+ color:var(--e-muted)!important;background:var(--yt-pill)!important;border:1px solid var(--e-border)!important;border-radius:6px;
+ vertical-align:.12em;cursor:help;
+}
+body .yt-tag:not([title]){cursor:default}
+body :is(.yt-tag-popular,.yt-tag-frequent){color:var(--e-num)!important;border-color:color-mix(in srgb,var(--e-num) 40%,transparent)!important}
+body .yt-tag-archaism{font-style:italic!important}
+
+/* Frequency ranks */
+body .yt-freqs{display:flex;flex-wrap:wrap;gap:6px;margin:.2em 0 .9em}
+body .yt-freq{display:inline-flex;overflow:hidden;font-size:.68em!important;line-height:1.8!important;border:1px solid var(--e-border)!important;border-radius:999px}
+body .yt-freq-name{padding:0 .7em;color:var(--e-muted)!important;background:var(--yt-pill)!important;font-weight:600!important}
+body .yt-freq-value{padding:0 .75em;font-weight:700!important;border-left:1px solid var(--e-border)!important;font-variant-numeric:tabular-nums}
+
+/* Senses */
+body .yt-senses{list-style:none;counter-reset:yt;margin:.4em 0 0!important;padding:0!important}
+body .yt-sense{counter-increment:yt;position:relative;margin:0 0 .75em!important;padding:0 0 0 1.9em!important}
+body .yt-sense::before{
+ content:counter(yt);position:absolute;left:0;top:.28em;display:grid;place-items:center;width:1.35em;height:1.35em;
+ font:700 .78em/1 var(--e-sans);color:var(--e-bg)!important;background:var(--e-num)!important;border-radius:50%;
+}
+body .yt-single>.yt-sense{padding-left:0!important}
+body .yt-single>.yt-sense::before{display:none}
+body .yt-tags{display:block;margin:0 0 .1em}
+body .yt-gloss{margin:0 0 .2em!important}
+body .yt-gloss-list .yt-sep{color:var(--e-muted)!important;margin:0 .1em}
+body .yt-gloss ul,body .yt-gloss ol{margin:.25em 0 .35em!important;padding-left:1.3em!important}
+body .yt-gloss li{margin:.1em 0}
+body .yt-gloss table{margin:.5em 0;font-size:.92em}
+body .yt-gloss :is(td,th){border:1px solid var(--e-border)!important}
+body .yt-gloss details{margin:.4em 0;padding:.2em .8em;border:1px solid var(--e-border)!important;border-radius:8px}
+body .yt-gloss summary{cursor:pointer;color:var(--e-muted)!important;font-family:var(--e-sans)!important;font-size:.85em!important}
+body .yt-img{max-width:min(100%,420px);height:auto;border-radius:6px;margin:.4em 0}
+body .yt-img-inline{display:inline;margin:0;vertical-align:middle}
+:root[data-scheme="dark"] body .yt-img{filter:brightness(.92)}
+body a.yt-link{cursor:pointer}
+body a.yt-external::after{content:"↗";font-size:.75em;margin-left:.15em;text-decoration:none!important;display:inline-block}
+
+/* Common Yomitan structured-content roles */
+body [data-sc-content="examples"],body [data-sc-content="example-sentence"]{list-style:none!important;margin:.35em 0 .5em 1.15em!important;padding:0!important}
+body [data-sc-content="examples"]>li,body [data-sc-content="example-sentence-a"]{color:var(--e-ex)!important}
+body [data-sc-content="example-sentence-b"]{color:var(--e-fg)!important;font-size:.94em!important}
+body [data-sc-content="glossaryShortDefinition"],body [data-sc-content="glossaryExtendedDefinition"]{list-style:none!important;padding:0!important;margin:.1em 0!important}
+body [data-sc-content="glossaryShortDefinition"]>li+li{margin-top:.25em}
+body [data-sc-content="glossaryShortDefinition"]>li::before,body [data-sc-content="glossaryExtendedDefinition"]>li::before{content:"";display:inline-block;width:.42em;height:.42em;margin:0 .55em .18em 0;border-radius:1px;background:var(--e-num)!important;transform:rotate(45deg)}
+body [data-sc-content="glossaryExtendedDefinition"]{color:var(--e-muted)!important;font-size:.94em!important}
+body [data-sc-content="glossaryExtendedDefinition"]::before{content:"補足";display:block;margin:.4em 0 .1em;font:700 .72em var(--e-sans);letter-spacing:.1em;color:var(--e-muted)}
+
+/* Pixiv encyclopedia: breadcrumb, summary, related articles. */
+body [data-sc-pixiv="nav-header"]{display:block;margin:0 0 .6em;font-size:.78em!important;line-height:1.7!important;color:var(--e-muted)!important}
+body [data-sc-pixiv="nav-header"] a{color:var(--e-muted)!important}
+body [data-sc-pixiv="summary"]{margin:0 0 .8em!important;font-size:1.02em}
+body :is([data-sc-pixiv="related-tags"],[data-sc-pixiv="children"]){margin:.7em 0!important;padding:.55em .9em!important;border:1px solid var(--e-border)!important;border-radius:10px;font-size:.9em!important;line-height:1.9!important}
+body :is([data-sc-pixiv="related-tags-header"],[data-sc-pixiv="children-header"]) ul{list-style:none!important;margin:0!important;padding:0!important}
+body :is([data-sc-pixiv="related-tags-header"],[data-sc-pixiv="children-header"]) li{font:700 .74em/1.8 var(--e-sans)!important;letter-spacing:.12em!important;color:var(--e-muted)!important}
+body :is([data-sc-pixiv="related-tags-content"],[data-sc-pixiv="children-content"])>span{color:var(--e-border)!important;margin:0 .2em}
+body [data-sc-pixiv="continue-reading"]{list-style:none!important;padding:0!important;margin:.6em 0 0!important;font:600 .8em var(--e-sans)!important}
+
+/* Kanji card (merged kanji dictionaries). */
+body .yt-khead{display:flex;gap:clamp(14px,4vw,26px);align-items:flex-start;margin:.1em 0 .9em}
+body .yt-glyph{
+ flex:none;display:grid;place-items:center;width:2.25em;height:2.25em;font-size:3.1em!important;line-height:1!important;font-weight:400!important;
+ font-family:"UD Digi Kyokasho N-R","UD デジタル 教科書体 N-R","Yu Mincho","Hiragino Mincho ProN","Noto Serif JP",serif!important;
+ color:var(--e-head)!important;border:1px solid var(--e-border)!important;border-radius:14px;
+ background-size:1px 100%,100% 1px!important;background-position:center!important;background-repeat:no-repeat!important;
+ background-image:linear-gradient(color-mix(in srgb,var(--e-border) 45%,transparent),color-mix(in srgb,var(--e-border) 45%,transparent)),linear-gradient(color-mix(in srgb,var(--e-border) 45%,transparent),color-mix(in srgb,var(--e-border) 45%,transparent))!important}
+body .yt-kinfo{min-width:0;flex:1;padding-top:.2em}
+body .yt-rrow{display:flex;gap:.7em;align-items:baseline;margin:0 0 .25em}
+body .yt-rlabel{flex:none;display:grid;place-items:center;width:1.7em;height:1.7em;font-size:.72em!important;font-weight:700!important;color:var(--e-bg)!important;background:var(--e-num)!important;border-radius:6px}
+body .yt-rrow+.yt-rrow .yt-rlabel{background:var(--e-link)!important}
+body .yt-rlist{display:flex;flex-wrap:wrap;gap:.1em .9em}
+body .yt-rd{font-size:1.05em}
+body .yt-okuri{color:var(--e-muted)!important}
+body .yt-okuri::before{content:"‧";margin:0 .05em}
+body .yt-badges{display:flex;flex-wrap:wrap;gap:5px;margin:.55em 0 .35em}
+body .yt-badge{padding:0 .65em;font-size:.72em!important;font-weight:650!important;line-height:1.85!important;color:var(--e-fg)!important;border:1px solid var(--e-border)!important;border-radius:999px;background:var(--yt-pill)!important}
+body .yt-badge-accent{color:var(--e-num)!important;border-color:color-mix(in srgb,var(--e-num) 45%,transparent)!important}
+body .yt-badge-accent2{color:var(--e-ex)!important;border-color:color-mix(in srgb,var(--e-ex) 40%,transparent)!important}
+body .yt-badge-muted{color:var(--e-muted)!important}
+body .yt-kmean{margin:.25em 0 0!important;font-style:italic!important;color:var(--e-muted)!important}
+body .yt-ksec{display:block;margin:0 0 .6em;padding:0!important;border:1px solid var(--e-border)!important;border-radius:12px}
+body .yt-ksec>summary{
+ cursor:pointer;list-style:none;padding:.45em .95em;font-size:.74em!important;font-weight:700!important;letter-spacing:.1em!important;color:var(--e-muted)!important;
+}
+body .yt-ksec>summary::-webkit-details-marker{display:none}
+body .yt-ksec>summary::before{content:"";display:inline-block;width:.45em;height:.45em;margin:0 .7em .12em 0;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg);transition:transform .15s ease}
+body .yt-ksec[open]>summary::before{transform:rotate(45deg)}
+body .yt-ksec[open]>summary{border-bottom:1px solid var(--e-border)!important}
+body .yt-ksec-body{padding:.6em 1em .75em}
+body .yt-shares{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 .6em}
+body .yt-share{position:relative;overflow:hidden;display:inline-flex;gap:.5em;align-items:baseline;padding:.1em .7em;border:1px solid var(--e-border)!important;border-radius:8px;min-width:4.6em}
+body .yt-share-bar{position:absolute;left:0;bottom:0;height:3px;background:var(--e-num)!important;opacity:.75}
+body .yt-share-p{font:600 .72em var(--e-sans)!important;color:var(--e-muted)!important;font-variant-numeric:tabular-nums}
+body .yt-rare{font-size:.9em!important;color:var(--e-muted)!important}
+body .yt-words{display:flex;flex-wrap:wrap;gap:.2em .75em;align-items:baseline}
+body .yt-sublabel{flex-basis:100%;font-size:.7em!important;font-weight:700!important;letter-spacing:.1em!important;color:var(--e-muted)!important}
+body .yt-words a{text-decoration-color:color-mix(in srgb,var(--e-link) 25%,transparent)!important}
+body .yt-kv{display:grid;grid-template-columns:minmax(4.5em,max-content) 1fr;gap:.9em;margin:.1em 0}
+body .yt-k{font-size:.76em!important;font-weight:700!important;color:var(--e-muted)!important;padding-top:.3em}
+body .yt-v a{margin-right:.35em}
+body .yt-wh{margin:.9em 0 .25em!important;font:700 .82em var(--e-sans)!important;letter-spacing:.12em!important;color:var(--e-num)!important}
+body .yt-wh:first-child{margin-top:.1em!important}
+body .yt-wh2{color:var(--e-muted)!important;font-size:.76em!important}
+body .yt-wl{margin:.12em 0!important}
+body .yt-wsrc{margin:.6em 0 0!important;font-size:.72em!important}
+body .yt-credit{margin-top:2em;padding-top:.7em;border-top:1px solid var(--e-border)!important;font-size:.7em!important;color:var(--e-muted)!important}
+body .yt-credit a{color:var(--e-muted)!important}
+body .yt-missing{padding:1.5em 0;color:var(--e-muted)!important}

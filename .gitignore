@@ -1,0 +1,30 @@
+# Personal journals, game text, purchased dictionaries and credentials stay local.
+data/
+saved_sentences/
+dictionaries/
+__pycache__/
+*.py[cod]
+*.sqlite*
+*.db
+*.mdx
+*.mdd
+*.log
+*.tmp
+.env
+.env.*
+*-key.txt
+local-settings.json
+.venv/
+runtime/
+portable/
+*.zip
+bundle-manifest.json
+translation/
+*.argosmodel
+ios/build/
+ios/*.xcodeproj/
+*.ipa
+# Personal extracted game scripts
+scripts/
+# JLPT語彙: personal path to the vocab root (sources/lessons live there, not here)
+vocab_root.txt
