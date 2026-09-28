@@ -75,6 +75,63 @@ def record(code,entry_id=None,word=None):
             word=text[len('@@@LINK='):].strip();entry_id=None
         raise ValueError('Dictionary cross-reference is too deep.')
 
+# Headword list labels: show the written (kanji) form next to a kana headword.
+# The spelling usually sits in a cross-reference target ("こうとう［高騰］",
+# "あう【会う】", "こうとう，高等", "光頭") or in the entry's first bracket.
+_KANJI=re.compile(r'[㐀-鿿豈-﫿々〆ヶ]')
+_BRACKETS=re.compile(r'【([^】]{1,40})】|［([^］]{1,40})］|〔([^〕]{1,40})〕|《([^》]{1,40})》')
+def _plain(text):
+    text=re.sub(r'(?is)<(style|script|head)\b.*?</\1>','',text)
+    text=re.sub(r'<[^>]+>',' ',text)
+    return re.sub(r'\s+',' ',html.unescape(text)).strip()
+def _clean_label(label):
+    label=re.sub(r'\s+','',label).replace('，','・').replace(',','・').strip('・、 ')
+    return label if _KANJI.search(label) else ''
+def _first_bracket(text):
+    for m in _BRACKETS.finditer(text):
+        label=_clean_label(next(g for g in m.groups() if g))
+        if label:return label
+    return ''
+def _link_label(target,headword):
+    """Label from a @@@LINK target, or None when the link must be followed."""
+    target=target.strip()
+    if '🗏' in target:target=target.split('🗏',1)[0]
+    target=target.replace('░','').strip()
+    if _BRACKETS.search(target):return _first_bracket(target)
+    parts=re.split('[，,]',target,maxsplit=1)
+    if len(parts)==2 and not _KANJI.search(parts[0]):return _clean_label(parts[1])
+    target=re.sub(r'-\d+$','',target)
+    if _KANJI.search(target) and normalize(target)!=normalize(headword):return _clean_label(target)
+    return None
+def labels(code,ids):
+    ids=[int(i) for i in ids][:120]
+    out={}
+    if not INDEX.exists() or not ids:return out
+    with closing(connect()) as db:
+        source=db.execute("SELECT id FROM files WHERE code=? AND kind='.mdx'",(code,)).fetchone()
+        if source is None:raise ValueError('Unknown local dictionary.')
+        for entry_id in ids:
+            label='';headword=''
+            try:
+                row=db.execute('SELECT * FROM records WHERE id=? AND file=?',(entry_id,source['id'])).fetchone()
+                headword=row['word'] if row else ''
+                # Headwords already written in kanji need no label (and their first
+                # bracket is often a translation, not a spelling).
+                if _KANJI.search(headword):row=None
+                for _ in range(6):
+                    if row is None:break
+                    raw,encoding=read_record(db,row);text=raw.decode(encoding,errors='replace').strip('\x00\r\n ')
+                    if not text.startswith('@@@LINK='):
+                        label=_first_bracket(_plain(text)[:240]);break
+                    target=text[len('@@@LINK='):].strip()
+                    found=_link_label(target,headword)
+                    if found is not None:label=found;break
+                    row=db.execute('SELECT * FROM records WHERE file=? AND norm=? LIMIT 1',(source['id'],normalize(target))).fetchone()
+            except (ValueError,OSError,zlib.error,UnicodeError,sqlite3.Error):label=''
+            if label and normalize(label)==normalize(headword):label=''
+            out[str(entry_id)]=label
+    return out
+
 def route(kind,code,**kw):return '/api/dictionary/'+kind+'?'+urlencode({'code':code,**kw})
 def resource_name(name):
     name=unquote(name).replace('\\','/').lstrip('/')
@@ -152,4 +209,4 @@ def entry(code,entry_id=None,word=None):
     css=re.sub(r'url\(([^)]+)\)',cssurl,css,flags=re.I).replace('</style','')
     if code=='MDX_ALL':text=collection_sections(text)
     parser=CleanHTML(code);parser.feed(text)
-    return ('<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>'+css+'</style><body class="mdict-entry"><div class="dictionary-source">'+html.escape(d['name'])+' · '+html.escape(title)+'</div>'+''.join(parser.parts)+'<style>.import-source{display:block;margin:14px 0;padding:12px;border:1px solid #526571;border-radius:8px}.import-source>summary{cursor:pointer;font-weight:bold}ddudm,ddudc{display:block!important}img{max-width:100%;height:auto}audio{min-width:180px}table{max-width:100%}</style><link rel="stylesheet" href="/dictionary-entry.css"></body></html>').encode('utf-8')
+    return ('<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>'+css+'</style><body class="mdict-entry" data-dict="'+html.escape(code,quote=True)+'"><div class="dictionary-source">'+html.escape(d['name'])+' · '+html.escape(title)+'</div>'+''.join(parser.parts)+'<style>.import-source{display:block;margin:14px 0;padding:12px;border:1px solid #526571;border-radius:8px}.import-source>summary{cursor:pointer;font-weight:bold}ddudm,ddudc{display:block!important}img{max-width:100%;height:auto}audio{min-width:180px}table{max-width:100%}</style><link rel="stylesheet" href="/dictionary-entry.css"></body></html>').encode('utf-8')

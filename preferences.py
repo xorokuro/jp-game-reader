@@ -1,5 +1,6 @@
 """Keep appearance and dictionary preferences with the portable journal."""
 import json
+import re
 
 
 def allowed(key):
@@ -39,3 +40,19 @@ def bootstrap(path):
       Storage.prototype.removeItem=function(k){remove.call(this,k);if(this===localStorage&&allowed(k))schedule();};
       addEventListener('pagehide',persist);
     })();''').encode('utf-8')
+
+
+ENTRY_COLORS=('bg','fg','muted','link','strong','border','sel','ex')
+
+
+def entry_theme_css(path):
+    """Theme colours for sandboxed dictionary entries, so they open without a colour flash."""
+    try:
+        values=json.loads(path.read_text(encoding='utf-8'))
+        theme=json.loads(values.get('jp-reader-entry-theme','null'))
+    except (OSError,ValueError,TypeError):
+        return b''
+    if not isinstance(theme,dict):return b''
+    rules=[f'--e-{k}:{theme[k]};' for k in ENTRY_COLORS if isinstance(theme.get(k),str) and re.fullmatch(r'#[0-9a-fA-F]{6}',theme[k])]
+    if theme.get('scheme') in ('light','dark'):rules.append(f"color-scheme:{theme['scheme']};")
+    return ('\n:root{'+''.join(rules)+'}\n').encode('ascii') if rules else b''

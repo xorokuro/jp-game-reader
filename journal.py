@@ -1,5 +1,6 @@
 """Persistent local Japanese sentence journal. Standard-library only."""
 import local_dictionary
+import script_library
 import argparse,collections,difflib,json,re,socket,sqlite3,subprocess,threading,time,unicodedata,webbrowser
 from contextlib import contextmanager,closing
 from pathlib import Path
@@ -221,7 +222,7 @@ class Matcher:
         for r in rows:
             text=visible_text(r.get('japanese',r.get('ja','')));n=norm(text).casefold()
             if len(n)<6 and not (len(n)>=2 and (text.lstrip().startswith(('「','『')) or text.rstrip().endswith(('。','！','？','!','?')))):continue
-            self.items.setdefault(n,{'text':text,'id':r.get('id','')})
+            self.items.setdefault(n,{'text':text,'id':r.get('id',''),'en':r.get('en',''),'zh':r.get('zh','')})
         for n in self.items:
             if 2<=len(n)<6:self.short_kana[n.translate(self.kana_sizes)].add(n)
             for i in range(len(n)-1):self.index[n[i:i+2]].add(n)
@@ -281,6 +282,15 @@ class Matcher:
         if score<.92:return None
         if score<1 and len(ranked)>1 and coverage[ranked[1]]==coverage[n] and best[ranked[1]]>score-.05:return None
         return {**self.items[n],'confidence':score}
+def attach_translation(journal,row,item):
+    """Fill empty translations from the matched script line (the game's official EN / 繁中)."""
+    if not row or not item or row.get('english') or not (item.get('en') or item.get('zh')):return row
+    if row.get('temporary'):
+        row.update(english=item.get('en',''),traditional_chinese=item.get('zh',''));return row
+    try:
+        journal.edit({'id':row['id'],'english':item.get('en',''),'traditional_chinese':item.get('zh','')})
+        return journal.get(row['id']) or row
+    except (ValueError,sqlite3.Error):return row
 class Recorder:
     def __init__(self,journal,matcher):
         self.journal=journal;self.matcher=matcher;self.candidate='';self.repeats=0;self.last='';self.ignored=False;self.last_sample_at=0
@@ -299,6 +309,7 @@ class Recorder:
         required=3 if not match else 2
         if self.repeats<required or (not force and identity==self.last):return None
         result=self.journal.record(text,game,match['id'] if match else None,match['confidence'] if match else 0,'corpus' if match else 'ocr',raw)
+        result=attach_translation(self.journal,result,match)
         self.ignored=result is None
         self.last=identity
         return result
@@ -316,8 +327,20 @@ def main():
     settings.setdefault('capture_mode','obs' if not args.no_capture else 'paste')
     if args.no_capture:settings['capture_mode']='paste'
     journal.save_text=settings['capture_mode'] in ('obs','window')
-    corpus=[] # This game has no supplied extracted script.
-    matcher=Matcher(corpus);recorder=Recorder(journal,matcher)
+    # Extracted game scripts: readable/searchable in the 台本 tab, and used to correct OCR.
+    library=script_library.Library();recorder=Recorder(journal,Matcher([]))
+    script_state={'mode':settings.get('script_match','auto'),'active':None,'title':'','status':'Loading scripts…'}
+    def choose_matcher():
+        try:
+            scripts=library.refresh();mode=settings.get('script_match','auto')
+            script=None if mode=='off' else library.scripts.get(mode) if mode!='auto' else (library.for_window(settings.get('window_title','')) or (scripts[0] if len(scripts)==1 else None))
+            script_state.update(mode=mode,status='Preparing OCR matching…' if script else ('No scripts found' if not scripts else 'OCR matching off'))
+            built=Matcher(script.matcher_rows()) if script else Matcher([])
+            recorder.matcher=built
+            script_state.update(active=script.id if script else None,title=script.title if script else '',status=('OCR 會對照《'+script.title+'》台本校正' if script else script_state['status']))
+        except Exception as e:
+            script_state.update(active=None,status='Script error: '+str(e))
+    threading.Thread(target=choose_matcher,daemon=True).start()
     state={'status':'Starting recorder','paused':True,'raw':'','last':journal.get(journal.recent()[0]['id']) if journal.recent() else None,'version':0,'retry':{'pending':False,'message':''}};lock=threading.RLock();stop=threading.Event();restart=threading.Event();worker=[None]
     origin=f'http://127.0.0.1:{args.port}'
     import deepl_web
@@ -398,7 +421,7 @@ def main():
                     if current is None:
                         recent=journal.recent();current=journal.get(recent[0]['id']) if recent else None
                     pending=journal.pending()
-                    for item in pending['rows']:item['suggestions']=matcher.suggest(item['text'])
+                    for item in pending['rows']:item['suggestions']=recorder.matcher.suggest(item['text'])
                     return self.send({**state,'workspace':str(Path(args.database).parent.resolve()),'save_text':journal.save_text,'capture_enabled':settings['capture_mode']!='paste','last':current,'settings':settings,'translation_fields':True,'pending_ocr':pending,'recent':journal.recent(),'exports':{'pending':journal.export_pending.is_set(),'updated_at':journal.exported_at,'error':journal.export_error}})
             query=parse_qs(urlparse(self.path).query)
             try:
@@ -411,14 +434,32 @@ def main():
                 if p=='/api/local-models':
                     import local_translate
                     return self.send(local_translate.models())
+                if p=='/api/script/list':
+                    if not library.scripts:library.refresh()
+                    return self.send({'scripts':[s.info() for s in library.scripts.values()],'match':dict(script_state)})
+                if p=='/api/script/search':
+                    q=lambda k,d='':query.get(k,[d])[0]
+                    kinds=[k for k in q('kinds').split(',') if k] or None
+                    return self.send(library.get(q('script')).search(q('q'),kinds,q('need'),q('path'),int(q('offset','0')),int(q('limit','100')),q('annotated')=='1'))
+                if p=='/api/script/position':
+                    q=lambda k,d='':query.get(k,[d])[0]
+                    kinds=[k for k in q('kinds').split(',') if k] or None
+                    return self.send({'offset':library.get(q('script')).position(int(q('n')),q=q('q'),kinds=kinds,need=q('need'),path=q('path'),annotated=q('annotated')=='1')})
+                if p=='/api/script/row':
+                    return self.send(library.get(query['script'][0]).row(int(query['n'][0])))
+                if p=='/api/script/locate':
+                    return self.send(library.locate(query['key'][0]))
                 if p=='/api/dictionary/catalog':
-                    return self.send({'dictionaries':local_dictionary.catalog()})
+                    return self.send({'dictionaries':local_dictionary.catalog(),'yomitan':local_dictionary.catalog_status()})
                 if p=='/api/dictionary/resolve':
-                    raw=local_dictionary.mdict_library.entry(query['code'][0],word=query['word'][0])
+                    raw=local_dictionary.resolve(query['code'][0],query['word'][0])
                     return self.send(raw,mime='text/html; charset=utf-8')
                 if p=='/api/dictionary/entry':
                     raw=local_dictionary.entry(query['code'][0],int(query['id'][0]),query.get('anchor',[''])[0])
                     return self.send(raw,mime='text/html; charset=utf-8')
+                if p=='/api/dictionary/labels':
+                    ids=[i for i in query.get('ids',[''])[0].split(',') if i.strip()]
+                    return self.send({'labels':local_dictionary.labels(query['code'][0],ids)})
                 if p=='/api/dictionary/media':
                     raw,mime=local_dictionary.media(query['code'][0],query['name'][0])
                     return self.send(raw,mime=mime)
@@ -438,10 +479,14 @@ def main():
                         self.send_response(200);self.send_header('Content-Type','application/octet-stream');self.send_header('Content-Disposition','attachment; filename="'+name+'"');self.end_headers()
                         while chunk:=stream.read(65536):self.wfile.write(chunk)
                     return
-            except (ValueError,KeyError) as e:return self.send({'error':str(e)},400)
-            if p in ['/','/index.html','/app.js','/translations.js','/style.css','/dictionary.js','/dictionary.css','/dictionary-entry.css','/deepl-web.js','/reader.js']:
+            except (ValueError,KeyError,sqlite3.Error) as e:return self.send({"error":str(e)},400)
+            if p in ['/','/index.html','/app.js','/translations.js','/style.css','/dictionary.js','/dictionary.css','/dictionary-entry.css','/deepl-web.js','/reader.js','/theme.js','/script.js']:
                 name='index.html' if p=='/' else p[1:];mime={'html':'text/html','js':'text/javascript','css':'text/css'}[name.rsplit('.',1)[1]]
-                return self.send((HERE/name).read_bytes(),mime=mime+'; charset=utf-8')
+                raw=(HERE/name).read_bytes()
+                if name=='dictionary-entry.css':
+                    import preferences
+                    raw+=preferences.entry_theme_css(preferences_path)
+                return self.send(raw,mime=mime+'; charset=utf-8')
             self.send({'error':'Not found'},404)
         def do_POST(self):
             if not self.allowed() or self.headers.get('Origin')!=origin:return self.send({'error':'Local requests only'},403)
@@ -464,6 +509,7 @@ def main():
                         recorder.candidate='';recorder.last='';recorder.repeats=0
                         restart.set()
                         if worker[0] and worker[0].poll() is None:worker[0].terminate()
+                    if settings.get('script_match','auto')=='auto':threading.Thread(target=choose_matcher,daemon=True).start()
                     return self.send({'ok':True,'settings':settings})
                 elif self.path=='/api/save-text':
                     if not isinstance(body.get('enabled'),bool):raise ValueError('Expected enabled true or false.')
@@ -516,6 +562,23 @@ def main():
                             restart.set()
                             if worker[0] and worker[0].poll() is None:worker[0].terminate()
                     return self.send({'ok':True,'retry':dict(state['retry'])})
+                elif self.path=='/api/script/match':
+                    mode=str(body.get('mode','auto'))
+                    if mode not in ('auto','off') and mode not in library.scripts:raise ValueError('Unknown script.')
+                    with lock:
+                        settings['script_match']=mode
+                        config_path.write_text(json.dumps(settings,ensure_ascii=False,indent=2),encoding='utf-8')
+                    threading.Thread(target=choose_matcher,daemon=True).start()
+                    return self.send({'ok':True})
+                elif self.path=='/api/retry-cancel':
+                    with lock:
+                        was_pending=bool(state['retry'].get('pending'))
+                        state['retry']={'pending':False,'message':'已取消辨識。' if was_pending else ''}
+                        recorder.candidate='';recorder.repeats=0
+                        if was_pending:
+                            restart.set()
+                            if worker[0] and worker[0].poll() is None:worker[0].terminate()
+                    return self.send({'ok':True,'cancelled':was_pending,'retry':dict(state['retry'])})
                 elif self.path=='/api/pause':
                     with lock:
                         if settings['capture_mode']=='paste' and not body['paused']:raise ValueError('Choose a capture source first.')
@@ -540,9 +603,10 @@ def main():
                         if body['choice']=='correct':
                             with journal.connect() as db:pending=db.execute('SELECT text FROM pending_ocr WHERE id=?',(int(body['id']),)).fetchone()
                             if not pending:raise ValueError('這筆待確認文字已處理，請重新整理。')
-                            correction=next((r for r in matcher.suggest(pending['text']) if r['id']==body.get('source_id')),None)
+                            correction=next((r for r in recorder.matcher.suggest(pending['text']) if r['id']==body.get('source_id')),None)
                             if correction is None:raise ValueError('Invalid correction')
                         result=journal.decide(int(body['id']),body['choice']!='ignore',correction,body.get('japanese') if body['choice']=='keep' else None)
+                        if correction:result=attach_translation(journal,result,correction)
                         if result:state['last']=result
                         state['version']+=1;recorder.last=''
                     return self.send({'ok':True,'row':result})
@@ -598,6 +662,8 @@ def main():
         if not args.no_browser:webbrowser.open(origin)
         return
     journal.start_exports()
+    # New or changed Yomitan zips (dictionaries/yomitan, yomitan-paths.txt) are imported in the background.
+    local_dictionary.yomitan_library.ensure_async()
     import auto_translate
     if not settings.get('local_translation_initialized'):
         settings.update(auto_translate=False,local_translation_initialized=True)

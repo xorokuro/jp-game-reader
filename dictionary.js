@@ -4,10 +4,9 @@
   const status=document.getElementById('lookup-state');
   const selectionHint=document.createElement('p');selectionHint.className='muted';
   selectionHint.textContent='Auto lookup: select up to 10 characters. Longer text or sentences stay selected for copying. Right-drag to highlight without searching, or hold Shift while selecting.';
-  status.after(selectionHint);
   input.addEventListener('click',()=>input.select());
   input.addEventListener('focus',()=>input.select());
-  const pasteWord=document.createElement('button');pasteWord.type='button';pasteWord.id='lookup-paste';pasteWord.textContent='Paste and search';
+  const pasteWord=document.createElement('button');pasteWord.type='button';pasteWord.id='lookup-paste';pasteWord.innerHTML=(window.readerIcon?readerIcon('paste'):'')+'<span>貼上查詢</span>';pasteWord.title='貼上剪貼簿文字並查詢 · Paste and search';
   pasteWord.setAttribute('aria-label','Paste clipboard text and search my dictionaries');input.after(pasteWord);
   pasteWord.onclick=async()=>{
     try{
@@ -25,21 +24,33 @@
   try{onlineToggle.checked=localStorage.getItem('fortune-show-online-lookup')==='true';}catch{}
   onlineButton.hidden=!onlineToggle.checked;
   onlineToggle.onchange=()=>{onlineButton.hidden=!onlineToggle.checked;try{localStorage.setItem('fortune-show-online-lookup',String(onlineToggle.checked));}catch{}};
-  onlineSetting.append(onlineToggle,document.createTextNode(' Show “Look up online” (Jisho)'));
+  onlineSetting.append(onlineToggle,document.createTextNode(' 顯示 Jisho 線上查詢按鈕 · Show “Look up online”'));
   document.getElementById('theme-settings').append(onlineSetting);
   const panel=document.createElement('div');panel.id='dictionary-panel';panel.hidden=true;
-  panel.innerHTML='<div class="dict-toolbar"><strong>Your dictionaries</strong><button type="button" id="dict-read">Read word aloud (synthetic voice)</button><button type="button" id="dict-close">Close dictionary</button></div><p class="muted">Recorded dictionary pronunciations appear as audio players inside entries. Synthetic read-aloud uses an available browser voice.</p><div id="dict-tabs" role="group" aria-label="Installed dictionaries"></div><div class="dict-layout"><div id="dict-entries" aria-label="Matching entries"></div><iframe id="dict-frame" title="Purchased dictionary definition" sandbox="allow-same-origin"></iframe></div>';
+  panel.innerHTML='<div class="dict-head"><div class="dict-title"><span class="dict-seal" aria-hidden="true">辞</span><div><strong>辞書 · Dictionary</strong><span class="dict-word-line"><span id="dict-word" class="dict-word" lang="ja"></span><span id="dict-freq" class="dict-freq" aria-label="Word frequency" hidden></span></span></div></div><div class="dict-toolbar"><button type="button" id="dict-read" class="icon-button" title="朗讀（合成語音）· Read aloud" aria-label="Read word aloud (synthetic voice)"></button><details class="dict-pop" id="dict-help"><summary class="icon-button" title="說明與快捷鍵 · Help" aria-label="Help and shortcuts"></summary><div class="dict-pop-body"><b>選取即查詢 · How lookup works</b></div></details><button type="button" id="dict-close" class="icon-button" title="關閉辭典 · Close" aria-label="Close dictionary"></button></div></div><div class="dict-body"><nav id="dict-tabs" role="group" aria-label="Installed dictionaries"><div id="dict-entries" aria-label="Matching entries"></div></nav><div class="dict-main"><div class="dict-frame-wrap"><iframe id="dict-frame" title="Purchased dictionary definition" sandbox="allow-same-origin"></iframe><div id="dict-empty" class="dict-empty"><svg viewBox="0 0 120 90" aria-hidden="true"><path d="M60 22c-12-8-28-10-44-7-1 20-1 40 1 60 16-2 30 0 43 8 13-8 27-10 43-8 2-20 2-40 1-60-16-3-32-1-44 7Zm0 1c-1 20-1 40 0 60"/><path d="M26 34c7-1 14 0 21 3M26 45c7-1 14 0 21 3M73 37c7-3 14-4 21-3M73 48c7-3 14-4 21-3" opacity=".6"/><path d="M98 10c1 4 3 6 7 7-4 1-6 3-7 7-1-4-3-6-7-7 4-1 6-3 7-7Z" class="twinkle"/></svg><b>選一個單字吧</b><span>在左邊反白日文，或在上方輸入 · Select a word on the left, or type above.</span></div></div></div></div>';
+  panel.querySelector('#dict-read').innerHTML=(window.readerIcon?readerIcon('speaker'):'');
+  panel.querySelector('#dict-close').innerHTML=(window.readerIcon?readerIcon('x'):'');
+  panel.querySelector('#dict-help>summary').innerHTML=(window.readerIcon?readerIcon('help'):'');
+  const helpBody=panel.querySelector('#dict-help .dict-pop-body');helpBody.append(selectionHint);
+  const audioNote=document.createElement('p');audioNote.className='muted';audioNote.textContent='辭典內建的真人發音會以播放器顯示在詞條中；「朗讀」使用瀏覽器的合成語音。Recorded pronunciations appear inside entries; Read aloud uses a browser voice.';helpBody.append(audioNote);
+  const emptyNote=panel.querySelector('#dict-empty');
+  function setEmpty(title,text){emptyNote.querySelector('b').textContent=title;emptyNote.querySelector('span').textContent=text;}
+  for(const pop of panel.querySelectorAll('.dict-pop'))pop.addEventListener('toggle',()=>{if(pop.open)for(const other of panel.querySelectorAll('.dict-pop'))if(other!==pop)other.open=false;});
+  document.addEventListener('pointerdown',event=>{for(const pop of panel.querySelectorAll('.dict-pop[open]'))if(!pop.contains(event.target))pop.open=false;});
   const workspace=document.createElement('div');workspace.id='reader-workspace';
   const current=document.querySelector('section.current');
   current.before(workspace);workspace.append(current,panel);
   const preferences=document.createElement('details');preferences.id='dict-preferences';
-  preferences.innerHTML='<summary>Choose dictionaries</summary><p class="muted">Checked dictionaries appear in the results. Drag the ⠿ handle to reorder dictionaries. Choices and order are saved automatically.</p><div id="dict-choices"></div>';
-  panel.querySelector('.dict-toolbar').after(preferences);
+  preferences.className='dict-pop';
+  preferences.innerHTML='<summary class="icon-button" title="選擇辭典與順序 · Choose dictionaries" aria-label="Choose dictionaries"></summary><div class="dict-pop-body"><b>選擇辭典 · Choose dictionaries</b><p class="muted">Checked dictionaries appear in the results. Drag the ⠿ handle to reorder dictionaries. Choices and order are saved automatically.</p><p id="dict-import-note" class="dict-import-note" hidden></p><div id="dict-choices"></div></div>';
+  preferences.querySelector('summary').innerHTML=(window.readerIcon?readerIcon('list'):'');
+  panel.querySelector('#dict-help').before(preferences);
+  preferences.addEventListener('toggle',()=>{if(preferences.open)for(const other of panel.querySelectorAll('.dict-pop'))if(other!==preferences)other.open=false;});
   const preferenceKey='fortune-weave-visible-dictionaries-v1';
   let selectedCodes=null;
   try{const saved=JSON.parse(localStorage.getItem(preferenceKey));if(Array.isArray(saved))selectedCodes=new Set(saved);}catch{}
   if(selectedCodes===null)selectedCodes=new Set(['MDX_ALL','MDX_SHO','MDX_MEI']);
-  let dictionaries=[],catalog=[],currentCode='',dictionaryOrder=[];
+  let dictionaries=[],catalog=[],currentCode='',dictionaryOrder=[],catalogStatus={},frequencies=[];
   try{if(!localStorage.getItem('fortune-nhk-added')){selectedCodes.add('MDX_NHK');localStorage.setItem(preferenceKey,JSON.stringify([...selectedCodes]));localStorage.setItem('fortune-nhk-added','1');}}catch{}
   try{if(!localStorage.getItem('fortune-sho-jcd3-added')){selectedCodes.add('MDX_SHO_JCD3');localStorage.setItem(preferenceKey,JSON.stringify([...selectedCodes]));localStorage.setItem('fortune-sho-jcd3-added','1');}}catch{}
   try{if(!localStorage.getItem('fortune-crown-added')){selectedCodes.add('MDX_CROWN');localStorage.setItem(preferenceKey,JSON.stringify([...selectedCodes]));localStorage.setItem('fortune-crown-added','1');}}catch{}
@@ -56,6 +67,8 @@
   try{if(!localStorage.getItem('fortune-mdict-added-v1')){['MDX_ALL','MDX_SHO','MDX_MEI'].forEach(c=>selectedCodes.add(c));localStorage.setItem(preferenceKey,JSON.stringify([...selectedCodes]));localStorage.setItem('fortune-mdict-added-v1','1');}}catch{}
   function renderChoices(){
     const choices=document.getElementById('dict-choices');choices.replaceChildren();
+    const note=document.getElementById('dict-import-note');
+    if(note){const y=catalogStatus||{};note.hidden=!(y.importing||y.error);note.classList.toggle('error',!!y.error);note.textContent=y.error?'Yomitan 匯入失敗 · '+y.error:y.importing?'正在匯入 Yomitan 辭典… '+(y.message||''):'';}
     const available=ordered(catalog.length?catalog:dictionaries);
     available.forEach((d,index)=>{
       const label=document.createElement('label'),check=document.createElement('input');
@@ -65,6 +78,12 @@
         renderTabs();if(input.value.trim())searchDictionaries(true);
       };
       label.append(check,document.createTextNode(d.name));
+      if(d.source==='yomitan'){
+        const badge=document.createElement('span');badge.className='dict-kind dict-kind-'+d.kind;
+        badge.textContent=d.kind==='freq'?'頻度':d.kind==='kanji'?'漢字':'Yomitan';
+        badge.title=d.kind==='freq'?'顯示在查詢字旁的頻度排名 · Frequency rank shown beside the word':d.kind==='kanji'?'合併：'+(d.parts||[]).join('、'):'Yomitan 辭典';
+        label.append(badge);
+      }
       const row=document.createElement('div');row.className='dict-choice-row';row.append(label);
       row.dataset.code=d.code;
       const handle=document.createElement('button');handle.type='button';handle.className='dict-drag-handle';handle.textContent='⠿';handle.setAttribute('aria-label','Drag to reorder '+d.name);handle.title='Drag to reorder; keyboard: Alt + Up / Down';row.prepend(handle);
@@ -90,13 +109,28 @@
       choices.append(row);
     });
   }
+  // Tabs show a compact name; the full title stays in the tooltip and the entry page.
+  function shortDictionaryName(full){
+    const base=String(full||'').replace(/\s*[（(]?第\s*\d+\s*版[）)]?/g,'').trim();
+    const short=base.replace(/^[（(][^）)]*[）)]\s*/,'').replace(/^(大修館|旺文社|小学館|三省堂|研究社|講談社|朝日出版社|くろしお出版|岩波書店)\s*/,'').replace(/(新|大)?(辞典|辞書)(?=\s|·|［|$)/g,'').replace(/\s+·\s+/,' · ').trim();
+    return short.length>=2?short:base;
+  }
   function renderTabs(){
-    tabs.replaceChildren();const visible=ordered(dictionaries.filter(d=>selectedCodes.has(d.code)));
-    visible.forEach(d=>{const b=document.createElement('button');b.type='button';b.dataset.code=d.code;
-      b.textContent=d.name+' ('+(d.error?'error':d.count)+')';b.onclick=()=>choose(d);tabs.append(b);
+    tabs.replaceChildren();const visible=ordered(dictionaries.filter(d=>selectedCodes.has(d.code)&&d.kind!=='freq'));
+    visible.forEach(d=>{const b=document.createElement('button');b.type='button';b.dataset.code=d.code;b.className='dict-tab';
+      const name=document.createElement('span');name.className='dict-tab-name';name.textContent=shortDictionaryName(d.name);
+      const count=document.createElement('span');count.className='dict-tab-count';count.textContent=d.error?'!':String(d.count);
+      b.append(name,count);b.title=d.name+' ('+(d.error?'error':d.count)+')';
+      b.classList.toggle('empty',!!d.error||!d.entries.length);b.classList.toggle('error',!!d.error);
+      b.onclick=()=>{
+        // Clicking the open dictionary again folds or unfolds its headword list.
+        if(d.code===currentCode&&b.classList.contains('active')&&entries.isConnected){const folded=entries.classList.toggle('collapsed');b.setAttribute('aria-expanded',String(!folded));return;}
+        choose(d);
+      };
+      tabs.append(b);
     });
     const first=visible.find(d=>d.code===currentCode)||visible.find(d=>d.entries.length)||visible[0];
-    if(first)choose(first);else{currentCode='';entries.textContent='No dictionaries selected. Open “Choose dictionaries” to enable one.';frame.removeAttribute('src');}
+    if(first)choose(first);else{currentCode='';tabs.append(entries);entries.textContent='No dictionaries selected. Open “Choose dictionaries” to enable one.';frame.removeAttribute('src');setEmpty('還沒有選擇辭典','按上方的清單圖示選擇要查的辭典 · Open the list icon to choose dictionaries.');}
   }
   const tabs=document.getElementById('dict-tabs'),entries=document.getElementById('dict-entries'),frame=document.getElementById('dict-frame');
   let dictionaryZoom=100;
@@ -113,7 +147,18 @@
   }
   function changeDictionaryZoom(value){dictionaryZoom=Math.max(70,Math.min(200,value));try{localStorage.setItem('fortune-dictionary-zoom',String(dictionaryZoom));}catch{}applyDictionaryZoom();}
   zoomOut.onclick=()=>changeDictionaryZoom(dictionaryZoom-10);zoomIn.onclick=()=>changeDictionaryZoom(dictionaryZoom+10);zoomReset.onclick=()=>changeDictionaryZoom(100);
-  zoomControls.append(zoomOut,zoomReset,zoomIn);panel.querySelector('.dict-toolbar strong').after(zoomControls);applyDictionaryZoom();
+  // Dictionary typeface: book-style serif (default) or gothic.
+  let dictionaryFont='serif';
+  try{if(localStorage.getItem('jp-reader-dict-font')==='sans')dictionaryFont='sans';}catch{}
+  const fontToggle=document.createElement('button');fontToggle.type='button';fontToggle.className='dict-font-toggle';
+  function applyDictionaryFont(){
+    fontToggle.textContent=dictionaryFont==='sans'?'ゴ':'明';
+    fontToggle.title=dictionaryFont==='sans'?'辭典字體：黑體（按一下改為明朝）· Gothic':'辭典字體：明朝（按一下改為黑體）· Serif';
+    fontToggle.setAttribute('aria-label','Dictionary typeface: '+(dictionaryFont==='sans'?'gothic':'serif'));
+    try{const root=frame.contentDocument?.documentElement;if(root)root.dataset.font=dictionaryFont;}catch{}
+  }
+  fontToggle.onclick=()=>{dictionaryFont=dictionaryFont==='sans'?'serif':'sans';try{localStorage.setItem('jp-reader-dict-font',dictionaryFont);}catch{}applyDictionaryFont();};
+  zoomControls.append(zoomOut,zoomReset,zoomIn,fontToggle);applyDictionaryFont();panel.querySelector('.dict-toolbar').prepend(zoomControls);applyDictionaryZoom();
   function navigateDictionaryWithUndo(event){
     if(event.defaultPrevented||event.isComposing||event.altKey||!event.ctrlKey||event.metaKey||event.key.toLowerCase()!=='z')return;
     const target=event.target;
@@ -138,7 +183,7 @@
     if(key!=='a'&&key!=='d')return;
     const target=event.target;
     if(target?.isContentEditable||target?.closest?.('input,textarea,select,audio,video,[contenteditable],[role="textbox"],[role="slider"],[role="combobox"],[role="listbox"],[role="tablist"]'))return;
-    const visible=ordered(dictionaries.filter(d=>selectedCodes.has(d.code)));
+    const visible=ordered(dictionaries.filter(d=>selectedCodes.has(d.code)&&d.kind!=='freq'));
     const current=visible.findIndex(d=>d.code===currentCode);
     const direction=key==='d'?1:-1;
     for(let step=1;step<=visible.length;step++){
@@ -176,7 +221,7 @@
       cancelLookup();selecting=false;skipLookup=true;
       const target=event.target;
       if(target.closest('button,input,textarea,select,audio,video,summary')||(target.closest('[contenteditable]')&&!target.closest('#latest')))return;
-      const host=insideEntry?doc.body:target.closest('#latest,#latestenglish,#latestchinese');
+      const host=insideEntry?doc.body:target.closest('#latest,#latestenglish,#latestchinese,[data-lookup]');
       if(!host)return;
       const anchor=caretAt(event.clientX,event.clientY);
       if(!anchor||!host.contains(anchor.node))return;
@@ -215,7 +260,7 @@
       cancelLookup();skipLookup=event.shiftKey;
       const target=event.target;
       selecting=event.button===0&&!target.closest('button,input,textarea,select,a,audio,summary')&&(!target.closest('[contenteditable]')||!!target.closest('#latest'))&&
-        (insideEntry||!!target.closest('#latest,#latestenglish,#latestchinese'));
+        (insideEntry||!!target.closest('#latest,#latestenglish,#latestchinese,[data-lookup]'));
     });
     doc.addEventListener('pointercancel',()=>{selecting=false;cancelLookup();});
     doc.addEventListener('pointerup',event=>{
@@ -237,7 +282,11 @@
     // Entries stay sandboxed; the parent can read selections in local documents.
     let entryDocument;try{entryDocument=frame.contentDocument;}catch{return;}
     if(!entryDocument)return;
+    try{const code=new URL(frame.src,location.href).searchParams.get('code');if(code&&entryDocument.body)entryDocument.body.dataset.dict=code;}catch{}
+    applyDictionaryFont();
     applyDictionaryZoom();
+    window.readerTheme?.themeFrame(frame);
+    if(window.readerShortcutKeydown)entryDocument.addEventListener('keydown',window.readerShortcutKeydown);
     // Scroll only the embedded document. URL fragments can also scroll its
     // containing page when the browser brings the target into view.
     const anchor=new URL(frame.src,location.href).searchParams.get('anchor');
@@ -245,6 +294,13 @@
     const innerWindow=frame.contentWindow;
     if(innerWindow)innerWindow.scrollTo({top:target?target.getBoundingClientRect().top+innerWindow.scrollY:0,left:0,behavior:'instant'});
     enableSelectionSearch(entryDocument,true);
+    entryDocument.addEventListener('click',event=>{
+      const link=event.target.closest?.('a[data-lookup],a[data-external]');
+      if(!link)return;
+      event.preventDefault();
+      if(link.dataset.external){window.open(link.dataset.external,'_blank','noopener');return;}
+      input.value=link.dataset.lookup;searchDictionaries();
+    });
     const useSelection=()=>{
       if(document.activeElement===input)return;
       const active=entryDocument.activeElement;
@@ -261,10 +317,10 @@
   let requestVersion=0,spokenWord='';
   const searchHistory=[],forwardHistory=[];
   let searchPending=false,currentEntry=null;
-  const back=document.createElement('button');back.type='button';back.id='dict-back';back.textContent='← Previous search';back.title='Previous search (Ctrl+Z)';back.disabled=true;
-  panel.querySelector('.dict-toolbar strong').after(back);
-  const next=document.createElement('button');next.type='button';next.id='dict-next';next.textContent='Next search →';next.title='Next search (Ctrl+Shift+Z)';back.after(next);
-  const leftBack=back.cloneNode(true),leftNext=next.cloneNode(true);leftBack.id='lookup-back';leftNext.id='lookup-next';button.after(leftBack,leftNext);
+  const back=document.createElement('button');back.type='button';back.id='dict-back';back.innerHTML=(window.readerIcon?readerIcon('left'):'');back.setAttribute('aria-label','Previous search');back.title='Previous search (Ctrl+Z)';back.disabled=true;
+  back.hidden=true;panel.append(back);
+  const next=document.createElement('button');next.type='button';next.id='dict-next';next.innerHTML=(window.readerIcon?readerIcon('right'):'');next.setAttribute('aria-label','Next search');next.title='Next search (Ctrl+Shift+Z)';next.hidden=true;back.after(next);
+  const leftBack=back.cloneNode(true),leftNext=next.cloneNode(true);leftBack.hidden=leftNext.hidden=false;leftBack.id='lookup-back';leftNext.id='lookup-next';input.before(leftBack,leftNext);
   function updateBack(){
     for(const control of [back,leftBack]){control.disabled=!searchHistory.length&&!(searchPending&&spokenWord);control.title=searchHistory.length?'Previous: '+searchHistory.at(-1).word:'No earlier search';}
     for(const control of [next,leftNext]){control.disabled=!forwardHistory.length;control.title=forwardHistory.length?'Next: '+forwardHistory.at(-1).word:'No later search';}
@@ -272,14 +328,14 @@
   function rememberSearch(stack,saved){if(saved){stack.push(saved);if(stack.length>5)stack.shift();}}
   function snapshotSearch(){
     if(!spokenWord)return null;
-    return {word:spokenWord,dictionaries,code:currentCode,entry:currentEntry};
+    return {word:spokenWord,dictionaries,frequencies,code:currentCode,entry:currentEntry};
   }
   function restoreSearch(saved){
-    spokenWord=saved.word;input.value=saved.word;dictionaries=saved.dictionaries;currentCode=saved.code;panel.hidden=false;if(panel.querySelector('.dictionary-disclosure'))panel.querySelector('.dictionary-disclosure').open=true;
+    spokenWord=saved.word;input.value=saved.word;dictionaries=saved.dictionaries;frequencies=saved.frequencies||[];renderFrequencies();currentCode=saved.code;panel.hidden=false;if(panel.querySelector('.dictionary-disclosure'))panel.querySelector('.dictionary-disclosure').open=true;
     renderChoices();renderTabs();
     const dictionary=dictionaries.find(d=>d.code===saved.code&&selectedCodes.has(d.code));
     if(dictionary&&saved.entry)openEntry(dictionary,saved.entry);
-    status.textContent='“'+saved.word+'” · Search restored.';
+    status.textContent='“'+saved.word+'” · Search restored.';wordLabel.textContent=saved.word;
   }
   back.onclick=()=>{
     const current=snapshotSearch();
@@ -301,7 +357,7 @@
   selectionHint.textContent+=' Use ← / → for previous / next dictionary search (outside text fields).';
   const dictionaryShortcutHint=document.createElement('p');dictionaryShortcutHint.className='muted';
   dictionaryShortcutHint.textContent='A / D: previous / next dictionary with matches for this word. Skips empty dictionaries and wraps around (outside text fields).';
-  tabs.before(dictionaryShortcutHint);
+  helpBody.append(dictionaryShortcutHint);
   function openEntry(dictionary,row){
     currentEntry=row;
     const params=new URLSearchParams({code:dictionary.code,id:row.id,anchor:row.anchor||''});
@@ -313,15 +369,45 @@
     currentCode=dictionary.code;
     [...tabs.children].forEach(b=>{const selected=b.dataset.code===dictionary.code;b.classList.toggle('active',selected);b.setAttribute('aria-pressed',String(selected));});
     entries.replaceChildren();frame.removeAttribute('src');
-    if(dictionary.error){entries.textContent='Dictionary error: '+dictionary.error;return;}
-    if(!dictionary.entries.length){entries.textContent='No matches in this dictionary.';return;}
+    const activeTab=[...tabs.children].find(b=>b.dataset?.code===dictionary.code);if(activeTab)activeTab.after(entries);else tabs.append(entries);
+    entries.classList.toggle('single',dictionary.entries.length===1);entries.classList.toggle('kanji-list',dictionary.kind==='kanji');entries.classList.remove('collapsed');if(activeTab){activeTab.setAttribute('aria-expanded','true');activeTab.title=activeTab.title.replace(/ · 再按一次收合.*$/,'')+' · 再按一次收合／展開';}
+    if(dictionary.error){entries.textContent='Dictionary error: '+dictionary.error;setEmpty('這本辭典出錯了',dictionary.error);return;}
+    if(!dictionary.entries.length){entries.textContent='No matches in this dictionary.';setEmpty('這本辭典查不到「'+spokenWord+'」','按 A / D 換一本有結果的辭典 · Press A / D for the next dictionary with results.');return;}
     dictionary.entries.forEach(row=>{
-      const b=document.createElement('button');b.type='button';b.textContent=row.title;b.dataset.entry=String(row.id)+'#'+row.anchor;
+      const b=document.createElement('button');b.type='button';b.dataset.entry=String(row.id)+'#'+row.anchor;b.dataset.id=String(row.id);
+      drawEntryLabel(b,row,entryLabels.get(dictionary.code+':'+row.id));
       b.onclick=()=>openEntry(dictionary,row);entries.append(b);
     });
     openEntry(dictionary,dictionary.entries[0]);
+    loadEntryLabels(dictionary);
   }
-  button.textContent='Look up in my dictionaries';
+  // Headword list: add the written (kanji) form, e.g. 高騰 above こうとう.
+  const entryLabels=new Map();
+  function drawEntryLabel(b,row,label){
+    label=label||row.label||'';b.replaceChildren();b.classList.toggle('has-kanji',!!label);
+    if(!label){b.textContent=row.title;b.title=row.title;return;}
+    const kanji=document.createElement('span');kanji.className='entry-kanji';kanji.lang='ja';kanji.textContent=label;
+    const kana=document.createElement('span');kana.className='entry-kana';kana.lang='ja';kana.textContent=row.title;
+    b.append(kanji,kana);b.title=row.title.replace(/ · .*$/,'')+'【'+label+'】';
+  }
+  async function loadEntryLabels(dictionary){
+    if(dictionary.entries.length<2||dictionary.code.startsWith('YT_'))return;
+    const missing=dictionary.entries.filter(row=>!entryLabels.has(dictionary.code+':'+row.id)).map(row=>row.id);
+    if(missing.length){
+      try{
+        const response=await fetch('/api/dictionary/labels?'+new URLSearchParams({code:dictionary.code,ids:missing.join(',')}));
+        if(!response.ok)return;
+        const data=await response.json();
+        for(const id of missing)entryLabels.set(dictionary.code+':'+id,data.labels?.[String(id)]||'');
+      }catch{return;}
+    }
+    if(currentCode!==dictionary.code)return;
+    for(const b of entries.querySelectorAll('button[data-id]')){
+      const row=dictionary.entries.find(r=>String(r.id)===b.dataset.id);
+      if(row)drawEntryLabel(b,row,entryLabels.get(dictionary.code+':'+row.id));
+    }
+  }
+  button.innerHTML=(window.readerIcon?readerIcon('search'):'')+'<span>查詢</span>';button.title='在我的辭典中查詢 · Look up in my dictionaries (Enter)';
   const kenkyushaEntryKinds=new Map();
   async function mainKenkyushaFirst(results){
     const dictionary=results.find(d=>d.code==='MDX_KEN');
@@ -353,13 +439,44 @@
       await mainKenkyushaFirst(result.dictionaries);
       if(version!==requestVersion)return;
       if(previous&&previous.word!==word){rememberSearch(searchHistory,previous);forwardHistory.length=0;}
-      spokenWord=word;panel.hidden=false;if(panel.querySelector('.dictionary-disclosure'))panel.querySelector('.dictionary-disclosure').open=true;dictionaries=result.dictionaries;currentCode='';renderChoices();renderTabs();
-      status.textContent='“'+word+'” · Showing your chosen dictionaries. Change them under “Choose dictionaries”.';
+      spokenWord=word;panel.hidden=false;if(panel.querySelector('.dictionary-disclosure'))panel.querySelector('.dictionary-disclosure').open=true;dictionaries=result.dictionaries;frequencies=result.frequencies||[];renderFrequencies();currentCode='';renderChoices();renderTabs();
+      status.textContent='“'+word+'” · '+dictionaries.filter(d=>d.entries?.length).length+' 本辭典有結果 · A / D 切換';
+      wordLabel.textContent=word;rememberWord(word);window.dispatchEvent(new CustomEvent('reader-lookup',{detail:{word}}));
     }catch(e){if(version===requestVersion)status.textContent=e.message;}finally{if(version===requestVersion){button.disabled=false;searchPending=false;updateBack();}}
   }
   button.onclick=()=>searchDictionaries();
+  const wordLabel=document.getElementById('dict-word');
+  // Frequency lists (Yomitan) show as small rank chips beside the word; lower rank = more common.
+  const freqBox=panel.querySelector('#dict-freq');
+  function renderFrequencies(){
+    freqBox.replaceChildren();
+    const shown=ordered(frequencies.map(f=>({...f,code:f.code}))).filter(f=>selectedCodes.has(f.code));
+    freqBox.hidden=!shown.length;
+    for(const f of shown){
+      const chip=document.createElement('span');chip.className='dict-freq-chip';
+      const rank=Number(f.value);chip.dataset.band=!Number.isFinite(rank)?'':rank<=5000?'common':rank<=20000?'mid':'rare';
+      const name=document.createElement('b');name.textContent=String(f.name||'').replace(/\s*(語彙頻度|熟語頻度|頻度|Freq(uency)?)\s*$/i,'')||f.name;
+      const value=document.createElement('span');value.textContent='#'+f.display;
+      chip.append(name,value);
+      chip.title=f.name+'：第 '+f.display+' 位'+(chip.dataset.band==='common'?'（常見）':chip.dataset.band==='mid'?'（中等）':chip.dataset.band==='rare'?'（少見）':'')+' · rank '+f.display+(f.reading?' ('+f.reading+')':'');
+      freqBox.append(chip);
+    }
+  }
+  // Recently searched words, one click to look them up again.
+  const recentKey='jp-reader-recent-words';
+  const recentBox=document.createElement('div');recentBox.id='recent-words';recentBox.className='recent-words';recentBox.setAttribute('aria-label','Recent searches');
+  document.querySelector('[aria-label="Quick dictionary search"]').append(recentBox);
+  function recentWords(){try{const v=JSON.parse(localStorage.getItem(recentKey)||'[]');return Array.isArray(v)?v.filter(w=>typeof w==='string').slice(0,14):[];}catch{return [];}}
+  function drawRecent(){
+    const words=recentWords();recentBox.replaceChildren();recentBox.hidden=!words.length;
+    if(!words.length)return;
+    const label=document.createElement('span');label.className='recent-label';label.textContent='最近 ·';recentBox.append(label);
+    for(const w of words){const chip=document.createElement('button');chip.type='button';chip.className='word-chip';chip.textContent=w;chip.lang='ja';chip.title='再查一次「'+w+'」';chip.onclick=()=>{input.value=w;searchDictionaries();};recentBox.append(chip);}
+  }
+  function rememberWord(word){if(Array.from(word).length>20)return;const words=[word,...recentWords().filter(w=>w!==word)].slice(0,14);try{localStorage.setItem(recentKey,JSON.stringify(words));}catch{}drawRecent();}
+  drawRecent();
   input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();button.click();}});
-  document.getElementById('dict-close').onclick=()=>{if(panel.querySelector('.dictionary-disclosure'))panel.querySelector('.dictionary-disclosure').open=false;else panel.hidden=true;if(window.speechSynthesis)speechSynthesis.cancel();};
+  document.getElementById('dict-close').onclick=()=>{panel.hidden=true;if(window.speechSynthesis)speechSynthesis.cancel();window.dispatchEvent(new Event('reader-layout'));};
   document.getElementById('dict-read').onclick=()=>{
     if(!window.speechSynthesis){status.textContent='Synthetic voice is unavailable in this browser. Use the recorded pronunciation players.';return;}
     const language=/[\u3040-\u30ff\u3400-\u9fff]/.test(spokenWord)?'ja':'en';
@@ -370,6 +487,22 @@
     status.textContent='Synthetic read-aloud: '+voice.name;
   };
   if(window.speechSynthesis)speechSynthesis.getVoices();
-  preferences.querySelector('p').textContent='Search only checked dictionaries. Use ↑ / ↓ to set tab order. Your choices are saved.';
-  fetch('/api/dictionary/catalog').then(r=>{if(!r.ok)throw Error('catalog');return r.json();}).then(data=>{catalog=data.dictionaries;renderChoices();}).catch(()=>{});
+  preferences.querySelector('p').textContent='只搜尋勾選的辭典；拖曳 ⠿ 調整順序（或 Alt + ↑ / ↓）。設定會自動儲存。';
+  // Imported Yomitan dictionaries are switched on the first time each one appears.
+  const yomitanSeenKey='jp-reader-yomitan-seen-v1';
+  function enableNewYomitan(){
+    let seen;try{seen=new Set(JSON.parse(localStorage.getItem(yomitanSeenKey)||'[]'));}catch{seen=new Set();}
+    const fresh=catalog.filter(d=>d.source==='yomitan'&&!seen.has(d.code));
+    if(!fresh.length)return;
+    fresh.forEach(d=>{if(d.default_on!==false)selectedCodes.add(d.code);seen.add(d.code);});
+    try{localStorage.setItem(preferenceKey,JSON.stringify([...selectedCodes]));localStorage.setItem(yomitanSeenKey,JSON.stringify([...seen]));}catch{}
+    if(dictionaries.length){renderTabs();if(input.value.trim())searchDictionaries(true);}
+  }
+  function loadCatalog(){
+    fetch('/api/dictionary/catalog').then(r=>{if(!r.ok)throw Error('catalog');return r.json();}).then(data=>{
+      catalog=data.dictionaries;catalogStatus=data.yomitan||{};enableNewYomitan();renderChoices();
+      if(catalogStatus.importing)setTimeout(loadCatalog,4000);
+    }).catch(()=>{});
+  }
+  loadCatalog();
 })();

@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#f3eadb">
+<title>Japanese Reader · 日本語リーダー</title>
+<link rel="stylesheet" href="style.css?v=washi-1">
+<link rel="stylesheet" href="dictionary.css?v=washi-1">
+<script src="/portable-preferences.js"></script>
+<script src="theme.js?v=washi-1"></script>
+</head>
+<body>
+<div id="doodles" aria-hidden="true"></div>
+<div id="falling" aria-hidden="true"></div>
+
+<header class="topbar" id="topbar">
+ <div class="topbar-inner">
+  <div class="logo" aria-hidden="true">
+   <svg viewBox="0 0 48 48"><path class="enso" d="M38.6 13.4C35 8.3 28.6 5.6 22.3 6.7 13.6 8.2 7.4 16.4 8.3 25.2c.9 8.6 8.4 15.3 17.1 15 8.9-.3 15.9-7.8 15.6-16.7-.1-2.4-.7-4.6-1.7-6.6"/><text x="24.5" y="25" text-anchor="middle" dominant-baseline="central">読</text></svg>
+  </div>
+  <div class="logo-text">
+   <b>Japanese Reader</b>
+   <small>日本語リーダー · 一句一句，慢慢讀</small>
+  </div>
+  <div id="topbar-status" class="status-chip"></div>
+  <button id="ocr-pending-chip" class="pending-chip" type="button" hidden></button>
+  <div id="capture-actions" class="capture-actions">
+   <button id="retry-cancel" class="cancel" type="button" hidden title="取消目前的辨識 (Q)">取消辨識 <kbd>Q</kbd></button>
+   <button id="pause" type="button">開啟自動辨識</button>
+  </div>
+  <span id="today-chip" class="today-chip" title="今天查過的單字 · 連續學習天數"></span>
+  <button id="shortcut-open" class="icon-button" type="button" title="快捷鍵一覽 (?)" aria-label="Keyboard shortcuts"></button>
+  <button id="theme-open" class="icon-button theme-button" type="button" aria-controls="theme-drawer" aria-expanded="false"><span class="label">主題</span></button>
+ </div>
+</header>
+
+<main class="shell">
+
+ <section class="panel" aria-label="Quick dictionary search">
+  <h2>Dictionary · 快速查詞</h2>
+  <div class="toolbar">
+   <input id="lookup-word" placeholder="選取或輸入日文單字… · Select or type a word" autocomplete="off" spellcheck="false" lang="ja">
+   <button id="lookup-online" hidden>Jisho</button>
+   <button id="lookup-local" class="primary">查詢</button>
+  </div>
+  <p id="lookup-state" role="status"></p>
+ </section>
+
+ <section class="panel panel-status" aria-label="Recorder status">
+  <div id="status" role="status">Connecting to your journal…</div>
+  <p id="retry-message" role="status"></p>
+  <pre id="retry-text" hidden></pre>
+  <details class="note">
+   <summary>How recognition works · 使用說明</summary>
+   <p class="muted">Choose Pasted text, OBS projector, or a visible game window in Read from. Keep captured dialogue uncovered. Manual recognition is the default: press <kbd>R</kbd> (or the recognize button) when ready, <kbd>Ctrl</kbd>+<kbd>R</kbd> for the whole game screen, and <kbd>Q</kbd> to cancel. Automatic recognition is optional. Dictionary lookup works without translation. Start with HDR off for capture.</p>
+  </details>
+ </section>
+
+ <section id="ocr-review" class="panel" hidden>
+  <h2>這是台詞，還是雜訊？</h2>
+  <p class="muted">尚未確認的文字不會加入正式收藏。保留後即可傳送、翻譯；標成雜訊後不再重複提示。</p>
+  <div id="ocr-review-list"></div>
+ </section>
+
+ <section class="current panel">
+  <h2>読む · Reading</h2>
+  <div class="toolbar reading-nav">
+   <button id="sentence-prev">← 上一句</button>
+   <button id="sentence-next">下一句 →</button>
+   <button id="sentence-live">最新 · Latest</button>
+   <button id="retry-ocr" class="primary">↻ 重新辨識目前畫面</button>
+  </div>
+  <p id="reader-mode" class="muted"></p>
+  <label class="field-label">快速回看 <select id="recent-lines" aria-label="最近讀到的句子"></select></label>
+  <div id="latest" tabindex="0" aria-label="Japanese reading text" lang="ja"></div><p id="paste-status" class="muted" role="status">Paste Japanese to start reading, or choose a capture source.</p>
+  <h2>English</h2>
+  <div id="latestenglish" class="translation" lang="en">Not translated yet.</div>
+  <h2>繁體中文</h2>
+  <div id="latestchinese" class="translation" lang="zh-Hant">尚未加入翻譯。</div>
+  <div id="currentimport"></div>
+  <div class="toolbar"><button id="editcurrent">更多編輯／筆記</button></div>
+  <p id="latestmeta" class="muted"></p>
+ </section>
+
+ <section class="panel" aria-label="Translation and dictionary">
+  <h2>Translation · 翻譯引擎</h2>
+  <label class="switch"><input type="checkbox" id="auto-translation" checked> Auto · Selected engine · English + 繁體中文</label>
+  <p id="translation-state" role="status">Connecting…</p>
+  <p class="muted">Translation is optional. Choose LM Studio or an installed offline Argos package below. Auto fills missing translations; the manual button translates the displayed sentence again. Text stays temporary until you save it; saved passages remain local.</p>
+ </section>
+
+ <details id="history" class="panel">
+  <summary>歷史紀錄／搜尋已儲存句子</summary>
+  <h2>Your collection</h2>
+  <div class="toolbar">
+   <input id="search" type="search" placeholder="Find a sentence or note" aria-label="Search sentences">
+   <select id="filter" aria-label="Filter"><option value="all">All sentences</option><option value="new">Not studied</option><option value="star">Starred</option><option value="ocr">Check OCR</option></select>
+   <select id="order" aria-label="Order"><option value="newest">Newest first</option><option value="oldest">Story encounter order</option></select>
+  </div>
+  <div class="toolbar">
+   <button id="selectpage">Select this page</button>
+   <button id="clear">Clear selection</button>
+   <button id="prompt">Copy study prompt · EN + 繁中</button>
+   <button id="copy">Copy selected Japanese</button>
+   <span id="selected" class="pill"></span>
+  </div>
+  <div class="toolbar pager">
+   <button id="prev">← Previous</button>
+   <span id="page" class="pill"></span>
+   <button id="next">Next →</button>
+  </div>
+  <div id="sentences"></div>
+ </details>
+
+ <section class="panel" aria-label="Journal actions">
+  <h2>Journal · 儲存與匯出</h2>
+  <p id="message" role="status"></p>
+  <p id="export-status" class="muted" role="status"></p>
+  <div class="toolbar">
+   <span id="count" class="pill"></span>
+   <button id="stop">Save and close reader</button>
+   <button id="backup">Save database backup</button>
+   <button id="export">Export all JSON</button>
+   <button id="exporttxt">Export all Japanese text</button>
+  </div>
+ </section>
+
+ <details class="panel" id="obs-settings">
+  <summary>擷取範圍 · Capture area</summary>
+  <p class="muted">Saved automatically in <b>your current reading library</b>. Capture reads the selected OBS projector or game window. Recognized Japanese stays temporary unless automatic saving is enabled; review it for recognition mistakes.</p>
+  <pre id="raw"></pre>
+  <div class="toolbar">
+   <label class="field-label">Dialogue starts at (% down the window) <input id="top" type="number" min="0" max="94" value="55"></label>
+   <label class="field-label">Capture height (% of window) <input id="height" type="number" min="5" max="100" value="43"></label>
+   <button id="settings">Apply capture area</button>
+  </div>
+  <p class="muted">If menus or background text are being saved, narrow the capture area. Minimized or rapidly skipped dialogue may be missed; some game display modes may require the game to be active. The journal saves stable screen observations, not a guaranteed complete game transcript.</p>
+ </details>
+
+ <details class="panel">
+  <summary>Add a missed sentence manually</summary>
+  <textarea id="manual" placeholder="Paste Japanese here"></textarea>
+  <button id="add">Save sentence</button>
+ </details>
+
+ <details id="promptbox" class="panel">
+  <summary>準備好的 prompt · Prepared prompt</summary>
+  <textarea id="prepared" readonly></textarea>
+ </details>
+
+ <footer>Stored locally on this computer. The ChatGPT buttons send through your browser extension; the Claude button sends through the browser helper — if disconnected, copy and paste the prepared prompt. OCR runs on this computer.</footer>
+
+</main>
+
+<div id="theme-scrim" class="scrim" hidden></div>
+<aside id="theme-drawer" class="drawer" aria-label="Appearance" aria-hidden="true">
+ <div class="drawer-head">
+  <div><b>外觀 · Appearance</b><small>讓讀日文變成一件開心的事</small></div>
+  <button id="theme-close" class="icon-button" type="button" aria-label="Close appearance">✕</button>
+ </div>
+ <div class="drawer-body">
+  <h3>主題 · Palette</h3>
+  <div id="theme-presets" class="preset-grid" role="group" aria-label="Palette presets"></div>
+
+  <h3>背景插畫 · Doodles</h3>
+  <div id="theme-density" class="segmented" role="group" aria-label="Doodle amount"></div>
+  <div class="toggle-row">
+   <label><input id="theme-grain" type="checkbox"> 紙張質感 · Paper grain</label>
+   <label><input id="theme-falling" type="checkbox"> 飄落動畫 · Drifting petals</label>
+  </div>
+
+  <h3>閱讀 · Reading</h3>
+  <p class="drawer-note">日文字體 · Japanese typeface <span class="font-sample" lang="ja">読み・きさ</span></p>
+  <div id="theme-font" class="segmented" role="group" aria-label="Japanese typeface"></div>
+  <div id="theme-sizes" class="slider-stack"></div>
+
+  <h3>自訂顏色 · Custom colours</h3>
+  <div id="theme-colors" class="color-row"></div>
+  <button id="theme-custom-reset" type="button" class="link-button" hidden>回到主題原色 · Use palette colours</button>
+
+  <details id="theme-settings">
+   <summary>其他 · More</summary>
+  </details>
+ </div>
+ <div class="drawer-foot">
+  <button id="theme-reset" type="button">恢復預設外觀</button>
+  <span id="theme-save" role="status"></span>
+ </div>
+</aside>
+
+<div id="ocr-toast" class="toast" role="status" aria-live="polite" hidden>
+ <svg class="toast-spinner" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 8.2c-1.3-2.9-4.2-4.7-7.4-4.6C7.6 3.8 4.2 7.4 4.3 11.9c.1 4.4 3.7 7.9 8 7.8 3-.1 5.6-1.9 6.8-4.5"/></svg>
+ <span id="ocr-toast-text">正在辨識畫面…</span>
+ <button id="ocr-toast-cancel" type="button">取消 <kbd>Q</kbd></button>
+</div>
+
+<div id="shortcut-sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="shortcut-title" hidden>
+ <div class="sheet-card">
+  <div class="sheet-head"><b id="shortcut-title">快捷鍵 · Keyboard shortcuts</b><button id="shortcut-close" class="icon-button" type="button" aria-label="Close">✕</button></div>
+  <p class="drawer-note">在文字輸入框以外使用 · Works outside text fields</p>
+  <dl class="keys">
+   <dt><kbd>R</kbd></dt><dd>重新辨識目前畫面 · Recognize the dialogue area</dd>
+   <dt><kbd>Ctrl</kbd>+<kbd>R</kbd></dt><dd>辨識整個遊戲畫面 · Recognize the whole game screen</dd>
+   <dt><kbd>Q</kbd></dt><dd>取消辨識 · Cancel a recognition in progress</dd>
+   <dt><kbd>A</kbd> / <kbd>D</kbd></dt><dd>上一本／下一本有結果的辭典 · Previous / next dictionary</dd>
+   <dt><kbd>←</kbd> / <kbd>→</kbd></dt><dd>上一個／下一個查詢 · Previous / next search</dd>
+   <dt><kbd>Ctrl</kbd>+<kbd>V</kbd></dt><dd>貼上並查詢 · Paste into dictionary search</dd>
+   <dt><kbd>Shift</kbd> + 選取</dt><dd>只選取、不查詢 · Select without lookup (or right-drag)</dd>
+   <dt><kbd>?</kbd></dt><dd>顯示這張表 · Show this sheet</dd>
+  </dl>
+ </div>
+</div>
+
+<script src="translations.js"></script><script src="app.js?v=washi-1"></script>
+<script>
+const translationToggle=document.getElementById('auto-translation');
+translationToggle.onchange=async()=>{try{const r=await fetch('/api/translation',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:translationToggle.checked})});if(!r.ok)throw Error('Could not change translation setting');}catch(e){document.getElementById('translation-state').textContent=e.message;}};
+setInterval(async()=>{try{const r=await fetch('/api/state');const s=await r.json();if(s.translation){translationToggle.checked=s.translation.enabled;document.getElementById('translation-state').textContent=s.translation.status;}}catch{}},1600);
+document.addEventListener('selectionchange',()=>{const active=document.activeElement;if(active&&(active.matches('input,textarea')||active.isContentEditable))return;const selection=window.getSelection();if(!selection||selection.isCollapsed)return;const text=selection.toString().trim();if(text&&text.length<120)document.getElementById('lookup-word').value=text;});
+document.getElementById('lookup-online').onclick=()=>{const w=document.getElementById('lookup-word').value.trim();if(w)window.open('https://jisho.org/search/'+encodeURIComponent(w),'_blank','noopener');};
+</script><script src="dictionary.js?v=washi-1"></script><script src="deepl-web.js"></script><script src="reader.js?v=washi-2"></script><script src="script.js?v=1"></script>
+</body>
+</html>

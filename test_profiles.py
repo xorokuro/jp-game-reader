@@ -38,7 +38,7 @@ class Profiles(unittest.TestCase):
                     return json.load(response)
 
             for game, expected in [('game-a', 0), ('game-b', 0), ('game-a', 1)]:
-                proc = subprocess.Popen([sys.executable, str(root/'launch.py'), '--profile', game, '--port', str(port), '--no-browser', '--no-capture'], stdout=subprocess.PIPE, stderr=subprocess.PIPE,env=dict(os.environ,JP_READER_DICTIONARY_INDEX=str(root/'empty-index.sqlite3')))
+                proc = subprocess.Popen([sys.executable, str(root/'launch.py'), '--profile', game, '--port', str(port), '--no-browser', '--no-capture'], stdout=subprocess.PIPE, stderr=subprocess.PIPE,env=dict(os.environ,JP_READER_DICTIONARY_INDEX=str(root/'empty-index.sqlite3'),JP_READER_YOMITAN_INDEX=str(root/'empty-yomitan.sqlite3')))
                 ready = False
                 try:
                     for _ in range(100):
@@ -57,7 +57,7 @@ class Profiles(unittest.TestCase):
                     request('/api/save-text', {'enabled':True})
                     request('/api/translation', {'enabled':False})
                     self.assertEqual(request('/api/sentences')['total'], expected)
-                    self.assertEqual(request('/api/dictionary/catalog'), {'dictionaries': []})
+                    self.assertEqual(request('/api/dictionary/catalog')['dictionaries'], [])
                     if expected == 0:
                         block='今日はいい天気ですね。\n図書館で本を読みます。'
                         saved=request('/api/add', {'japanese':block})

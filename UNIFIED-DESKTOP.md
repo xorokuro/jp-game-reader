@@ -45,3 +45,62 @@ Run python -m unittest -v test_profiles test_reader test_translation_backends te
 Validate JavaScript syntax with node --check. Browser checks cover paste, explicit save,
 dictionary definitions and keyboard switching. Visible-window OCR was checked against
 an OBS projector; native game rendering modes require testing with the actual game.
+
+## Appearance and shortcuts (washi redesign)
+
+- **主題 · Appearance** (top-right) opens a drawer with eight palette presets
+  (和紙, 桜, 海辺, 墨, 抹茶, 夜の縁側, 紅葉, 星空), hand-drawn background doodle amount,
+  paper grain, drifting petals, Japanese typeface (教科書體 / 黑體 / 明朝), sizes and
+  optional custom paper/card/accent colours. Settings persist in `data/reading/preferences.json`.
+  Dictionary entries follow the active palette.
+- The dictionary sits beside the reading text, fills the window height and stays in view
+  while scrolling; its definition page is level with the Japanese text box.
+- Outside text fields: **R** recognizes the dialogue area, **Ctrl+R** recognizes the whole
+  game screen (instead of reloading) while a capture source is active, **Q** cancels a
+  recognition in progress (`POST /api/retry-cancel`), **?** shows all shortcuts.
+- Setup panels are collected as tiles under 道具箱 · Tools & settings.
+
+## 台本 · Game scripts
+
+- List script folders (each with `script.json`, optional `annotations.json`) in
+  `scripts/paths.txt`, one per line, or put them under `scripts/<name>/`. They stay out of Git.
+- The **台本** tab beside 読む reads, searches (JA / EN / 繁中, Ctrl+K), filters by kind,
+  language coverage, path or annotated lines, and jumps to `#n`. Lines load as you scroll.
+- Selecting text in a line looks it up in your dictionaries. Each line can be opened in the
+  reading card (and saved with its official translations), copied, or sent with a prompt
+  to ChatGPT/Claude. Annotated lines show 精讀註解 (ruby, 直譯, 語彙, 文法), reloaded when
+  `annotations.json` changes.
+- OCR matching: captured text that matches the chosen script (auto = by game window title)
+  is replaced by the exact script line and receives the official EN / 繁中 translations.
+
+## Panel size and dictionary pages (book-style redesign)
+
+- The reading/台本 card and the dictionary share one height. By default they fill the window
+  under the top bar. Drag the grip under the panels to make both longer (up to 6000 px);
+  drag the grip between them to give the dictionary more width. Double-click a grip, or
+  focus it and use the arrow keys, to reset/adjust. Saved as `jp-reader-workspace-v1`.
+- Dictionary entries keep each publisher's own layout (headword sizes, indents) and are
+  re-coloured to the palette: serif book type, large headword, muted labels, and examples
+  as an indented ink-blue phrase with the translation on the next line (`--e-ex`).
+  **明 / ゴ** beside the zoom buttons switches serif and gothic (`jp-reader-dict-font`).
+- Entry pages carry `data-dict="<code>"` on `<body>` for per-dictionary tweaks in
+  `dictionary-entry.css`. Dictionary tabs show a short name; the full title is the tooltip.
+
+## Yomitan dictionaries
+
+- Yomitan/Yomichan `.zip` dictionaries work next to the MDX files. List them in
+  `dictionaries/yomitan-paths.txt` (files or folders, `#` skips a line) or drop them into
+  `dictionaries/yomitan/`. When the reader starts, new or changed zips are imported in the
+  background into `dictionaries/yomitan-index.sqlite3` (Pixiv takes a minute or two); the
+  chooser shows progress. `Import Yomitan dictionaries.cmd` runs the same import by hand.
+  After importing, the zips are no longer needed; a missing source list never deletes the index.
+- Word dictionaries (JMdict, Pixiv, surasura, 複合語起源 …) get their own tabs with the book
+  styling: furigana headword, numbered senses, tag pills (hover for meaning), examples in
+  `--e-ex`. Links inside an entry (Pixiv related articles, JPDB words) search every dictionary.
+- All kanji dictionaries merge into one **漢字 · Kanji** tab: one card per kanji in the word
+  (音/訓, 常用・学年・JLPT・画数・漢検 badges, kanji frequency ranks, JPDB reading shares and
+  common words, 部首・構成, 字体/異体字, ja/zh Wiktionary, KANJIDIC index numbers).
+- Word-frequency lists (青空文庫) are not tabs: their rank appears as a chip beside the word
+  in the dictionary header (green = common ≤5,000, amber ≤20,000, grey = rarer).
+- New Yomitan dictionaries are ticked once when they first appear (name lists such as
+  Nico/Pixiv start unticked). Codes start with `YT_`; see `yomitan_library.py`.

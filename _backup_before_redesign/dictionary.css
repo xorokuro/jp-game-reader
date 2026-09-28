@@ -1,0 +1,135 @@
+/* ==========================================================================
+   Purchased-dictionary panel. Inherits the surface tokens from style.css.
+   ========================================================================== */
+
+/* Result height changes must not move the outer page's reading position. */
+html,body{overflow-anchor:none}
+#dict-entries,#dict-choices{overscroll-behavior:contain}
+
+/* --------------------------------------------------------------------------
+   Reader + dictionary workspace
+   -------------------------------------------------------------------------- */
+#reader-workspace{display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:start;scroll-margin-top:16px}
+#reader-workspace>*{min-width:0}
+#reader-workspace .current,#reader-workspace #dictionary-panel{margin:0}
+#reader-workspace #dictionary-panel[hidden]{display:none}
+#reader-workspace .dict-layout{grid-template-columns:minmax(0,1fr)}
+#reader-workspace #dict-entries{display:flex;flex-wrap:wrap;gap:6px;max-height:150px;overflow:auto}
+#reader-workspace #dict-entries button{width:auto;margin:0}
+#reader-workspace #dict-frame{height:clamp(420px,65vh,900px)}
+@media(min-width:1100px){
+ #reader-workspace:has(#dictionary-panel:not([hidden])){grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+ #reader-workspace .current{position:sticky;top:96px}
+}
+
+/* --------------------------------------------------------------------------
+   Panel shell
+   -------------------------------------------------------------------------- */
+#dictionary-panel{
+ --fg:var(--card-fg,#e7f2ee);
+ --accent:var(--card-accent,#75ddba);
+ --muted:color-mix(in srgb,var(--card-fg,#e7f2ee) 66%,var(--card-bg,#17221f));
+ --faint:color-mix(in srgb,var(--card-fg,#e7f2ee) 44%,var(--card-bg,#17221f));
+ --hairline:color-mix(in srgb,var(--card-fg,#e7f2ee) 14%,transparent);
+ --inset:color-mix(in srgb,var(--card-fg,#e7f2ee) 5%,var(--card-bg,#17221f));
+ --inset-strong:color-mix(in srgb,var(--card-fg,#e7f2ee) 10%,var(--card-bg,#17221f));
+
+ position:relative;
+ margin-top:18px;
+ padding:clamp(16px,2vw,22px);
+ color:var(--card-fg,#e7f2ee);
+ background-color:var(--card-bg,#17221f);
+ background-image:linear-gradient(180deg,color-mix(in srgb,var(--card-fg,#fff) 4%,transparent),transparent 160px);
+ border:1px solid var(--hairline);
+ border-radius:var(--rounding,16px);
+ box-shadow:0 1px 2px rgba(0,0,0,.14),0 18px 40px -26px rgba(0,0,0,.55);
+ scroll-margin-top:96px;
+}
+.dict-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.dict-toolbar strong{
+ margin-right:auto;
+ font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+ color:var(--accent);
+}
+.dict-toolbar button{font-size:13px;padding:8px 14px}
+.dict-zoom-controls{
+ display:inline-flex;align-items:center;gap:4px;
+ padding:3px;border-radius:999px;
+ background:var(--inset);border:1px solid var(--hairline);
+}
+.dict-zoom-controls button{padding:6px 11px;background:transparent;border-color:transparent;box-shadow:none}
+.dict-zoom-controls button:hover:not(:disabled){background:var(--inset-strong)}
+
+/* --------------------------------------------------------------------------
+   Dictionary tabs and matching entries
+   -------------------------------------------------------------------------- */
+#dict-tabs{display:flex;flex-wrap:wrap;gap:7px;margin:14px 0}
+#dict-tabs button{font-size:12.5px;padding:7px 13px;max-width:100%;white-space:normal;text-align:left}
+.dict-layout{display:grid;grid-template-columns:minmax(170px,26%) minmax(0,1fr);gap:14px}
+#dict-entries{max-height:620px;overflow:auto;padding-right:4px}
+#dict-entries button{
+ display:block;width:100%;margin-bottom:7px;
+ font-size:13px;font-weight:500;text-align:left;white-space:normal;
+ border-radius:10px;
+}
+#dict-tabs .active,#dict-entries .active{
+ background:color-mix(in srgb,var(--accent) 20%,var(--button-bg,#203b33));
+ border-color:color-mix(in srgb,var(--accent) 55%,transparent);
+ color:var(--button-fg,#e5f6ef);
+}
+#dict-frame{
+ width:100%;height:620px;
+ border:1px solid var(--hairline);
+ border-radius:var(--radius-sm,12px);
+ background:#151d24;
+ color-scheme:dark;
+}
+
+/* --------------------------------------------------------------------------
+   Dictionary chooser
+   -------------------------------------------------------------------------- */
+#dict-preferences{margin:14px 0}
+#dict-choices{display:grid;grid-template-columns:1fr;gap:6px;margin-top:10px}
+#dict-choices label{display:flex;align-items:center;gap:10px;font-size:13.5px;cursor:pointer}
+#dict-choices input{width:18px;height:18px;flex-shrink:0;accent-color:var(--accent)}
+.dict-choice-row{
+ display:flex;align-items:center;gap:8px;
+ padding:5px 10px;border-radius:10px;
+ transition:background-color .15s ease;
+}
+.dict-choice-row:hover{background:var(--inset-strong)}
+.dict-choice-row label{flex:1;min-width:0}
+.dict-choice-row button{padding:5px 11px;font-size:12.5px}
+
+.dict-drag-handle{
+ cursor:grab;touch-action:none;user-select:none;
+ font-size:20px;line-height:1;padding:4px 10px;
+ background:transparent;border-color:transparent;box-shadow:none;
+ color:var(--faint);
+}
+.dict-drag-handle:hover{background:var(--inset-strong);color:var(--fg)}
+.dict-dragging{
+ outline:2px solid var(--accent);outline-offset:2px;
+ background:var(--inset-strong);
+ opacity:.9;
+}
+.dict-dragging .dict-drag-handle{cursor:grabbing}
+
+@media(max-width:760px){
+ .dict-layout{grid-template-columns:1fr}
+ #dict-entries{max-height:150px}
+ #dict-frame{height:560px}
+}
+
+/* Keep the focused desktop columns aligned; the old sticky offset no longer
+   applies after moving the header beneath the workspace. */
+@media(min-width:1100px){
+ #reader-workspace{align-items:stretch}
+ #reader-workspace>section.current{position:static;top:auto;align-self:stretch}
+ #reader-workspace>#dictionary-panel{align-self:stretch}
+ #reader-workspace #dict-frame{height:clamp(320px,45vh,600px)}
+ #reader-workspace>section.current:has(>.reading-disclosure:not([open])),
+ #reader-workspace>#dictionary-panel:has(>.dictionary-disclosure:not([open])){align-self:start}
+}
+.reading-disclosure>.field-label{display:flex;align-items:center;gap:8px;min-width:0;width:100%}
+.reading-disclosure>.field-label select{flex:1;min-width:0;max-width:100%}

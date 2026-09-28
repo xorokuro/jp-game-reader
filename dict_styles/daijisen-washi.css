@@ -1,0 +1,74 @@
+/* デジタル大辞泉 (小学館) — Washi restyle for jp-game-reader and the iPhone app.
+   Colours follow the reader palette (--e-*) and fall back to washi paper on iPhone. */
+srejm,srejm *{box-sizing:border-box}
+srejm{
+ --d-bg:var(--e-bg,#fffaf1);--d-fg:var(--e-fg,#3b2f28);--d-muted:var(--e-muted,#8a7c70);--d-num:var(--e-strong,#c9573a);
+ --d-link:var(--e-link,#4e6f45);--d-line:var(--e-border,#e3d8c6);--d-ex:var(--e-ex,#2b4a8b);
+ --d-tint:color-mix(in srgb,var(--d-num) 9%,transparent);--d-tint2:color-mix(in srgb,var(--d-link) 10%,transparent);
+ --d-hand:"Segoe Print","Ink Free","UD Digi Kyokasho N-B","Klee One","Hannotate SC","Chalkboard SE",cursive;
+ --d-wob:13px 10px 14px 11px/10px 14px 11px 13px;
+ display:block;line-height:1.85;color:var(--d-fg)!important;
+}
+@media (prefers-color-scheme:dark){srejm{--d-bg:var(--e-bg,#243029);--d-fg:var(--e-fg,#edf2e4);--d-muted:var(--e-muted,#a9b3a2);--d-num:var(--e-strong,#e8a16f);--d-link:var(--e-link,#b7d07b);--d-line:var(--e-border,#3d4a42);--d-ex:var(--e-ex,#9ec2ff)}}
+
+/* chrome the publisher adds */
+srejm :is(Header,HeaderTitle,.title){display:none!important}
+srejm hr{border:0!important;border-top:1.5px dashed var(--d-line)!important;margin:.6em 0!important}
+
+/* disambiguation pages: ☞する【為る】 ☞する【刷る】 … */
+srejm>a[href]{display:inline-block!important;margin:.25em .15em!important;padding:.15em .8em!important;font-size:1.1em!important;
+ text-decoration:none!important;color:var(--d-fg)!important;background:color-mix(in srgb,var(--d-num) 8%,transparent)!important;
+ border:1.5px solid var(--d-line)!important;border-radius:var(--d-wob)}
+srejm>hr{display:none!important}
+
+/* headword block */
+srejm span.見出G{display:flex!important;flex-wrap:wrap;align-items:baseline;gap:.15em .5em;margin:0 0 .5em!important;padding:0 0 .45em!important;border-bottom:2px solid color-mix(in srgb,var(--d-num) 35%,transparent)!important}
+srejm headword.見出{font-size:1.7em!important;font-weight:700!important;letter-spacing:.03em!important;color:var(--d-fg)!important}
+srejm headword.表記{font-size:1.25em!important;font-weight:500!important;color:var(--d-fg)!important}
+srejm :is(headword.歴史,headword.原綴){font-size:.9em!important;color:var(--d-muted)!important}
+srejm :is(Hhyphen,Hdot,Wdot){color:var(--d-muted)!important;font-weight:400!important}
+srejm span:is(.常外M,.常外音訓M,.付表無M,.付表有M){font-size:.6em!important;vertical-align:super;color:var(--d-muted)!important}
+srejm MAccentAudioG{display:inline-flex!important;align-items:center;gap:.35em;font-size:.95em!important}
+srejm :is(MAccentM,MAccentSlash){color:var(--d-num)!important;font-weight:700!important}
+srejm img.audio{width:1.05em!important;height:1.05em!important;vertical-align:-.15em;opacity:.75}
+
+/* labels: アクセント / 用法 / 類語 / 季語 … */
+srejm span.補足ロゴG{display:inline-block}
+srejm span.補足ロゴ{display:inline-block;margin:0 .35em .1em 0;padding:0 .6em!important;font:700 .72em/1.8 var(--d-hand)!important;letter-spacing:.05em!important;color:var(--d-num)!important;border:1.3px solid color-mix(in srgb,var(--d-num) 55%,transparent)!important;border-radius:var(--d-wob)}
+srejm span:is(.季語ロゴS,.季語ロゴ前,.季語ロゴ中,.季語ロゴ後,.季語M,.季語){color:var(--d-link)!important;font-size:.9em!important}
+srejm hinshi{display:inline-block;margin:.2em 0 .1em!important;color:var(--d-muted)!important;font-size:.9em!important}
+
+/* senses */
+srejm span.解説G{display:block}
+srejm MG{display:block!important;margin:.55em 0 0!important}
+srejm MG:is(.L2,.L2A){margin-top:.9em!important}
+srejm MG:is(.L4,.L4A){margin-left:1.4em!important}
+srejm meaning{display:block}
+srejm rect{display:inline-grid;place-items:center;min-width:1.45em;height:1.45em;margin:0 .45em .1em 0;padding:0 .3em;font:700 .8em/1 system-ui,sans-serif!important;color:var(--d-bg)!important;background:var(--d-num)!important;border-radius:50% 45% 52% 48%/48% 52% 46% 54%;vertical-align:.12em}
+srejm rect:is(.IM,.small){background:color-mix(in srgb,var(--d-num) 70%,var(--d-fg))!important}
+srejm :is(L4,circle){color:var(--d-num)!important;font-weight:700!important;margin-right:.25em}
+srejm wari{font-size:.7em!important;color:var(--d-muted)!important;margin:0 .1em;vertical-align:.25em}
+
+/* examples: each 「…」 on its own line in the example colour */
+srejm ExG{display:block!important;margin:.25em 0 0 .9em!important;padding:0 0 0 .75em!important;color:var(--d-ex)!important;border-left:2.5px solid color-mix(in srgb,var(--d-ex) 35%,transparent)!important}
+srejm ExS{color:var(--d-muted)!important;font-size:.85em!important;margin-left:.3em}
+srejm ExS a{color:var(--d-muted)!important}
+
+/* usage notes and synonym lists */
+srejm meaning.C{margin-top:.8em!important;padding:.55em .8em!important;background:var(--d-tint)!important;border:1.5px dashed color-mix(in srgb,var(--d-num) 35%,transparent)!important;border-radius:var(--d-wob)}
+srejm meaning.C a.blue{display:inline-block;margin:.1em .05em;padding:0 .5em;text-decoration:none!important;color:var(--d-link)!important;background:var(--d-tint2)!important;border-radius:var(--d-wob)}
+srejm meaning.C bold{font-weight:700!important}
+srejm a,srejm a.blue{color:var(--d-link)!important;text-decoration:underline dotted!important;text-underline-offset:3px}
+
+/* phrases / idioms under the entry (目が合う …) */
+srejm SubItem{display:block!important;margin:.9em 0 0!important;padding:.55em .85em!important;border:1.5px dashed var(--d-line)!important;border-radius:var(--d-wob)}
+srejm SubItemH{display:block;margin-bottom:.15em}
+srejm SubItemH headword.見出{font-size:1.15em!important}
+srejm SubItemC MG{margin-top:.3em!important}
+
+/* pictures, locations, campaign boxes */
+srejm :is(MImageG,MImage){display:block;margin:.6em 0}
+srejm img.Image{max-width:min(100%,380px)!important;height:auto;border-radius:10px;border:1px solid var(--d-line)}
+srejm :is(MLocationG,CampaignExG){display:block;margin-top:.6em;color:var(--d-muted)!important;font-size:.9em!important}
+srejm img.gaiji{height:1em!important;vertical-align:-.12em}
+srejm bold{font-weight:700!important}
