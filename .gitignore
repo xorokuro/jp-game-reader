@@ -24,3 +24,7 @@ translation/
 ios/build/
 ios/*.xcodeproj/
 *.ipa
+# Personal extracted game scripts
+scripts/
+# JLPT語彙: personal path to the vocab root (sources/lessons live there, not here)
+vocab_root.txt

@@ -4,9 +4,9 @@
  reading.contentEditable='false';reading.tabIndex=0;reading.setAttribute('aria-readonly','true');reading.setAttribute('role','textbox');reading.setAttribute('aria-multiline','true');reading.spellcheck=false;
  reading.setAttribute('aria-label','Japanese text — select words to look them up');
  const bar=E('div');bar.className='toolbar reader-inputs';
- const paste=E('button','Paste text'),save=E('button','Save text / corrections');
+ const paste=E('button'),save=E('button');paste.innerHTML=(window.readerIcon?readerIcon('paste'):'')+'<span>貼上文字 · Paste</span>';save.innerHTML=(window.readerIcon?readerIcon('save'):'')+'<span>儲存 · Save</span>';save.title='Save text / corrections';
  const editLabel=E('label'),editToggle=E('input');editToggle.type='checkbox';editToggle.id='edit-reading-text';
- editLabel.append(editToggle,document.createTextNode(' Edit text'));
+ editLabel.append(editToggle,document.createTextNode(' 編輯 · Edit text'));
  editToggle.onchange=()=>{
   reading.contentEditable=editToggle.checked?'plaintext-only':'false';
   reading.setAttribute('aria-readonly',String(!editToggle.checked));
@@ -70,11 +70,13 @@
   save.disabled=true;
   try{
    let row;
+   const translations=original.english||original.traditional_chinese?{english:original.english||'',traditional_chinese:original.traditional_chinese||''}:null;
    if(original.id>0){
     await api('edit',{id:original.id,japanese:original.japanese,...(original.localDraft?{english:'',traditional_chinese:''}:{})});
     row=await api('sentence?id='+original.id);
    }else{
     row=(await api('add',{japanese:original.japanese,save:true,temporary_id:!original.localDraft?original.id:undefined})).row;
+    if(translations&&!row.english&&original.kind==='script'){await api('edit',{id:row.id,...translations});row=await api('sentence?id='+row.id);}
    }
    if(currentRecord===original){reading.dataset.dirty='false';following=false;navSeq=null;showCurrent(row);rememberPin();status.textContent='Saved. Select words to look them up. Check Edit text to make corrections.';}
    await loadPage();
@@ -131,39 +133,212 @@
   api('state').then(async state=>{mode.value=state.settings.capture_mode||'paste';applyMode(mode.value);showSource();if(mode.value==='window')await listWindows(state.settings.window_handle);}).catch(error=>hint.textContent=error.message);
 })();
 
-// Reading first; setup stays available below in closed disclosures.
+// Reading first: reader and dictionary side by side, setup tiles below.
 (() => {
+ const icon=name=>window.readerIcon?readerIcon(name):'';
  const shell=document.querySelector('main.shell'),workspace=$('reader-workspace'),dictionary=$('dictionary-panel');
  const quick=document.querySelector('[aria-label="Quick dictionary search"]');
- const dictionaryToolbar=dictionary.querySelector('.dict-toolbar');
- const quickHeading=quick.querySelector('h2');if(quickHeading)quickHeading.remove();
- quick.className='dictionary-quick-search';dictionaryToolbar.after(quick);
- const hints=quick.querySelector('.muted');
- if(hints){const help=E('details'),summary=E('summary','Selection and keyboard shortcuts');help.append(summary,hints);quick.append(help);}
- $('paste-status').after($('message'));
- const source=document.querySelector('.panel-status');source.append($('pause'));
- const brand=document.querySelector('.app-header');
- function disclosure(host,title,open=false,className=''){
-  const box=E('details'),summary=E('summary',title);box.className=className;box.open=open;
+ quick.querySelector('h2')?.remove();
+ quick.className='dictionary-quick-search';dictionary.querySelector('.dict-head').after(quick);
+ $('paste-status').after($('message'),$('retry-message'));
+ // Recognition controls and status live in the sticky top bar.
+ $('capture-actions').prepend($('retry-ocr'),$('retry-full-ocr'));
+ $('topbar-status').append($('status'));
+ const source=document.querySelector('.panel-status');
+ const tiles=new Map([
+  [source,['gamepad','來源與擷取','Source & capture']],
+  [document.querySelector('[aria-label="Translation and dictionary"]'),['globe','翻譯引擎','Translation']],
+  [document.querySelector('[aria-label="Journal actions"]'),['save','儲存與匯出','Journal & export']],
+  [$('ocr-review'),['spark','待確認台詞','OCR to review']]
+ ]);
+ function summaryContent(summary,[name,zh,en]){summary.innerHTML='<span class="tile-icon">'+icon(name)+'</span><span class="tile-title"><b></b><small></small></span>';summary.querySelector('b').textContent=zh;summary.querySelector('small').textContent=en;}
+ function disclosure(host,info,open=false){
+  const box=E('details'),summary=E('summary');box.className='settings-disclosure';box.open=open;summaryContent(summary,info);
   const children=[...host.childNodes];box.append(summary,...children);host.append(box);return box;
  }
  for(const host of [...shell.children]){
   if(host.tagName!=='SECTION'||host===workspace||host.classList.contains('current'))continue;
   const heading=host.querySelector(':scope > h2');
-  const title=host===source?'Source & capture settings':heading?.textContent||host.getAttribute('aria-label')||'Settings';
-  if(heading)heading.remove();disclosure(host,title,false,'settings-disclosure');
+  const info=tiles.get(host)||['note',heading?.textContent||host.getAttribute('aria-label')||'Settings',''];
+  if(heading)heading.remove();disclosure(host,info,host.id==='ocr-review');
  }
+ for(const [id,info] of [['history',['book','收藏與歷史','Your collection']],['obs-settings',['crop','擷取範圍','Capture area']],['promptbox',['note','準備好的 prompt','Prepared prompt']],['obs-batch',['basket','整段收集','Collect a scene']]]){
+  const summary=$(id)?.querySelector(':scope > summary');if(summary)summaryContent(summary,info);
+ }
+ // Reading card header.
  const readingPanel=workspace.querySelector('section.current');
- const heading=readingPanel.querySelector(':scope > h2');const title=heading.textContent;heading.remove();disclosure(readingPanel,title,true,'reading-disclosure');
- dictionary.querySelector('.dict-toolbar strong')?.remove();
- disclosure(dictionary,'Your dictionaries',true,'dictionary-disclosure');dictionary.hidden=false;
- if(!$('dict-tabs').children.length)$('dict-entries').textContent='Select a word, or paste a search above.';
- for(const id of ['latestenglish','latestchinese']){
-  const text=$(id),heading=text.previousElementSibling;
-  if(heading?.tagName==='H2'){const group=E('details'),summary=E('summary',heading.textContent);group.className='translation-disclosure';group.open=true;heading.before(group);group.append(summary,text);heading.remove();}
+ const heading=readingPanel.querySelector(':scope > h2');
+ const head=E('div');head.className='card-head';
+ const title=E('h2');title.className='hand-title';title.innerHTML='<span lang="ja">読む</span><small>Reading · 日文 / English / 繁體中文</small>';
+ head.append(title,$('reader-mode'));heading.replaceWith(head);
+ const nav=readingPanel.querySelector('.reading-nav');
+ $('sentence-prev').innerHTML=icon('left')+'<span>上一句</span>';$('sentence-next').innerHTML='<span>下一句</span>'+icon('right');
+ head.append(nav);
+ dictionary.hidden=false;
+ if(!$('dict-tabs').querySelector('.dict-tab'))$('dict-entries').textContent='';
+ for(const [id,label] of [['latestenglish','English'],['latestchinese','繁體中文']]){
+  const text=$(id),h=text.previousElementSibling;
+  if(h?.tagName==='H2'){const group=E('details'),summary=E('summary',label);group.className='translation-disclosure';group.dataset.lang=id==='latestenglish'?'en':'zh';group.open=true;h.before(group);group.append(summary,text);h.remove();}
  }
  const chatToggle=[...readingPanel.querySelectorAll('label')].find(label=>label.textContent.includes('Temporary Chat'));
- if(chatToggle){const options=E('details'),summary=E('summary','Chat options');options.append(summary,chatToggle);currentSend.after(options);}
- const about=E('details');about.className='panel';about.append(E('summary','About Japanese Reader'),brand);shell.append(about);
+ if(chatToggle){const options=E('details'),summary=E('summary','Chat options');options.className='chat-options';options.append(summary,chatToggle);currentSend.after(options);}
+ currentSend.classList.add('send-row');
+ $('copy-current-japanese').innerHTML=icon('paste')+'<span>複製日文</span>';
+ // Setup tiles sit in a tidy grid beneath the workspace; opened ones span the full width.
+ const grid=E('div');grid.className='settings-grid';
+ const footer=shell.querySelector(':scope > footer');
+ grid.append(...[...shell.children].filter(node=>node!==workspace&&node!==footer));
+ const review=grid.querySelector('#ocr-review');if(review)grid.prepend(review);
+ const gridTitle=E('h2');gridTitle.className='hand-title section-title';gridTitle.innerHTML='<span lang="ja">道具箱</span><small>Tools &amp; settings</small>';
+ workspace.after(gridTitle,grid);
  shell.prepend(workspace);
+
+ // Keep the dictionary's definition area level with the reading text, and let it fill the window.
+ const latest=$('latest'),body=dictionary.querySelector('.dict-body');
+ const leftPad=E('div'),rightPad=E('div');leftPad.className=rightPad.className='align-spacer';leftPad.setAttribute('aria-hidden','true');rightPad.setAttribute('aria-hidden','true');
+ latest.before(leftPad);body.before(rightPad);
+ const topbar=$('topbar');
+ let frame=0;
+ function align(){
+  frame=0;
+  document.documentElement.style.setProperty('--topbar-h',Math.round(topbar.getBoundingClientRect().height)+'px');
+  const sideBySide=!dictionary.hidden&&getComputedStyle(workspace).gridTemplateColumns.trim().split(/\s+/).length>1;
+  if(!sideBySide||readingPanel.dataset.view==='script'){leftPad.style.height=rightPad.style.height='0px';return;}
+  // While the search row is tucked away, keep the reading text where it is.
+  if(dictionary.classList.contains('search-tucked'))return;
+  const leftHead=latest.getBoundingClientRect().top-readingPanel.getBoundingClientRect().top-leftPad.offsetHeight;
+  const rightHead=body.getBoundingClientRect().top-dictionary.getBoundingClientRect().top-rightPad.offsetHeight;
+  const delta=Math.round(leftHead-rightHead);
+  const l=Math.max(0,-delta)+'px',r=Math.max(0,delta)+'px';
+  if(leftPad.style.height!==l)leftPad.style.height=l;
+  if(rightPad.style.height!==r)rightPad.style.height=r;
+ }
+ const schedule=()=>{if(!frame)frame=requestAnimationFrame(align);};
+ const observer=new ResizeObserver(schedule);
+ for(const node of [topbar,workspace,head,quick,dictionary.querySelector('.dict-head'),readingPanel.querySelector('.reader-inputs')])if(node)observer.observe(node);
+ new MutationObserver(schedule).observe(dictionary,{attributes:true,attributeFilter:['hidden']});
+ addEventListener('resize',schedule);addEventListener('reader-layout',schedule);
+ document.fonts?.ready.then(schedule);schedule();
+})();
+
+// Auto-hide the dictionary search row (search box, status, recent words) while scrolling
+// down a definition or the headword list; scrolling up brings it back. On by default.
+(() => {
+ const dictionary=$('dictionary-panel'),quick=dictionary?.querySelector('.dictionary-quick-search');
+ const frame=$('dict-frame'),tabs=$('dict-tabs');
+ if(!dictionary||!quick||!frame||!tabs)return;
+ const KEY='jp-reader-autohide-search';
+ let enabled=true;
+ try{enabled=localStorage.getItem(KEY)!=='false';}catch{}
+ let naturalHeight=0,quietUntil=0;
+ const positions=new WeakMap();
+ const quiet=ms=>{quietUntil=performance.now()+ms;};
+ const tucked=()=>dictionary.classList.contains('search-tucked');
+ function tuck(){
+  if(tucked()||!enabled)return;
+  if(quick.contains(document.activeElement))document.activeElement.blur();
+  naturalHeight=quick.scrollHeight||naturalHeight;
+  quick.style.maxHeight=naturalHeight+'px';void quick.offsetHeight;
+  dictionary.classList.add('search-tucked');quick.setAttribute('aria-hidden','true');quiet(320);
+ }
+ function reveal(){
+  if(!tucked())return;
+  quick.style.maxHeight=(naturalHeight||400)+'px';
+  dictionary.classList.remove('search-tucked');quick.removeAttribute('aria-hidden');quiet(320);
+  dispatchEvent(new Event('reader-layout'));
+ }
+ quick.addEventListener('transitionend',event=>{if(event.target===quick&&event.propertyName==='max-height'&&!tucked())quick.style.maxHeight='';});
+ // Scroll direction with a little accumulation so touchpad jitter does not flicker.
+ function watch(key,y){
+  const state=positions.get(key)||{y,acc:0};positions.set(key,state);
+  const delta=y-state.y;state.y=y;
+  if(!enabled||performance.now()<quietUntil){state.acc=0;return;}
+  state.acc=(Math.sign(delta)===Math.sign(state.acc)?state.acc:0)+delta;
+  if(state.acc>28&&y>40){state.acc=0;tuck();}
+  else if(state.acc<-28||y<=2){state.acc=0;reveal();}
+ }
+ const wheelUp=event=>{if(enabled&&event.deltaY<-4&&performance.now()>=quietUntil)reveal();};
+ tabs.addEventListener('scroll',()=>watch(tabs,tabs.scrollTop),{passive:true});
+ tabs.addEventListener('wheel',wheelUp,{passive:true});
+ frame.addEventListener('load',()=>{
+  let win,doc;try{win=frame.contentWindow;doc=frame.contentDocument;}catch{return;}
+  if(!win||!doc)return;
+  quiet(300);positions.set(win,{y:win.scrollY,acc:0});
+  win.addEventListener('scroll',()=>watch(win,win.scrollY),{passive:true});
+  doc.addEventListener('wheel',wheelUp,{passive:true});
+ });
+ quick.addEventListener('focusin',reveal);
+ addEventListener('reader-lookup',reveal);
+ // Setting: one checkbox in the dictionary help popover, one in Theme › More; kept in sync.
+ const boxes=[];
+ function makeSetting(host){
+  if(!host)return;
+  const label=document.createElement('label'),box=document.createElement('input');
+  label.className='dict-autohide-setting';box.type='checkbox';box.checked=enabled;
+  box.onchange=()=>{
+   enabled=box.checked;for(const other of boxes)other.checked=enabled;
+   try{localStorage.setItem(KEY,String(enabled));}catch{}
+   if(!enabled)reveal();
+  };
+  label.append(box,document.createTextNode(' 往下捲動時隱藏搜尋列 · Hide search bar while scrolling down'));
+  host.append(label);boxes.push(box);
+ }
+ makeSetting(dictionary.querySelector('#dict-help .dict-pop-body'));
+ makeSetting($('theme-settings'));
+})();
+
+// Workspace size: drag the bottom grip to make both panels longer, and the middle grip
+// to give the dictionary more width. Double-click either grip to reset. Saved per reader.
+(() => {
+ const workspace=document.getElementById('reader-workspace'),dictionary=document.getElementById('dictionary-panel');
+ const reading=workspace?.querySelector('section.current');
+ if(!workspace||!dictionary||!reading)return;
+ const KEY='jp-reader-workspace-v1',MIN_H=420,MAX_H=6000;
+ let size={h:null,left:null};
+ try{const saved=JSON.parse(localStorage.getItem(KEY)||'null');if(saved&&typeof saved==='object'){if(Number.isFinite(saved.h))size.h=saved.h;if(Number.isFinite(saved.left))size.left=saved.left;}}catch{}
+ const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(size));}catch{}};
+ const tip=document.createElement('div');tip.className='ws-size-tip';tip.hidden=true;
+ function apply(){
+  if(size.h)workspace.style.setProperty('--ws-custom-h',Math.round(Math.max(MIN_H,Math.min(MAX_H,size.h)))+'px');else workspace.style.removeProperty('--ws-custom-h');
+  if(size.left){const f=Math.max(.28,Math.min(.72,size.left));workspace.style.setProperty('--ws-left',f.toFixed(4)+'fr');workspace.style.setProperty('--ws-right',(1-f).toFixed(4)+'fr');}
+  else{workspace.style.removeProperty('--ws-left');workspace.style.removeProperty('--ws-right');}
+  place();dispatchEvent(new Event('reader-layout'));
+ }
+ const grip=(cls,label,title)=>{const b=document.createElement('button');b.type='button';b.className='ws-grip '+cls;b.setAttribute('aria-label',label);b.title=title;return b;};
+ const hGrip=grip('ws-grip-h','Resize panel height','拖曳調整兩側面板高度 · 雙擊恢復填滿視窗 (↑/↓)');
+ const vGrip=grip('ws-grip-v','Resize panel widths','拖曳調整左右寬度 · 雙擊恢復預設 (←/→)');
+ workspace.append(hGrip,vGrip,tip);
+ function place(){
+  const a=reading.getBoundingClientRect(),b=dictionary.getBoundingClientRect(),w=workspace.getBoundingClientRect();
+  vGrip.style.left=Math.round(a.right-w.left+(b.left-a.right)/2-13)+'px';
+ }
+ function showTip(text){tip.textContent=text;tip.hidden=false;clearTimeout(showTip.t);showTip.t=setTimeout(()=>tip.hidden=true,1200);}
+ function drag(el,down,onMove){
+  el.addEventListener('pointerdown',event=>{
+   if(event.button!==0)return;event.preventDefault();el.setPointerCapture(event.pointerId);
+   el.classList.add('dragging');document.body.classList.add('ws-resizing');
+   const start=down(event);
+   const move=e=>onMove(e,start);
+   const up=()=>{el.releasePointerCapture?.(event.pointerId);el.classList.remove('dragging');document.body.classList.remove('ws-resizing');el.removeEventListener('pointermove',move);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',up);save();};
+   el.addEventListener('pointermove',move);el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);
+  });
+ }
+ const panelHeight=()=>dictionary.getBoundingClientRect().height;
+ drag(hGrip,e=>({y:e.clientY+scrollY,h:panelHeight()}),(e,s)=>{
+  size.h=Math.max(MIN_H,Math.min(MAX_H,s.h+(e.clientY+scrollY-s.y)));apply();
+  if(e.clientY>innerHeight-40)scrollBy(0,18);
+  showTip('高度 '+Math.round(size.h)+' px · 雙擊恢復');
+ });
+ drag(vGrip,()=>({}),e=>{
+  const w=workspace.getBoundingClientRect();size.left=Math.max(.28,Math.min(.72,(e.clientX-w.left)/w.width));apply();
+  showTip('左 '+Math.round(size.left*100)+'% · 右 '+Math.round((1-size.left)*100)+'%');
+ });
+ hGrip.addEventListener('dblclick',()=>{size.h=null;save();apply();showTip('已恢復：填滿視窗');});
+ vGrip.addEventListener('dblclick',()=>{size.left=null;save();apply();showTip('已恢復預設寬度');});
+ hGrip.addEventListener('keydown',e=>{if(!['ArrowUp','ArrowDown'].includes(e.key))return;e.preventDefault();e.stopPropagation();size.h=Math.max(MIN_H,Math.min(MAX_H,(size.h||panelHeight())+(e.key==='ArrowDown'?60:-60)));save();apply();showTip('高度 '+Math.round(size.h)+' px');});
+ vGrip.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();e.stopPropagation();const w=workspace.getBoundingClientRect(),cur=size.left||reading.getBoundingClientRect().width/w.width;size.left=Math.max(.28,Math.min(.72,cur+(e.key==='ArrowRight'?.02:-.02)));save();apply();});
+ new ResizeObserver(place).observe(workspace);
+ new MutationObserver(place).observe(dictionary,{attributes:true,attributeFilter:['hidden']});
+ addEventListener('resize',place);
+ apply();
 })();

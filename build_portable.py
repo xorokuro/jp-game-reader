@@ -75,6 +75,14 @@ def build(index, destination, runtime_archive, argos_pack=None):
         target.commit()
         if target.execute('PRAGMA quick_check').fetchone()[0]!='ok':raise ValueError('Dictionary index verification failed.')
     copied.append({'path':target_index.relative_to(destination).as_posix(),'bytes':target_index.stat().st_size,'sha256':checksum(target_index)})
+    yomitan_index=index.parent/'yomitan-index.sqlite3'
+    if yomitan_index.is_file():
+        print('Copying Yomitan dictionary index...',flush=True)
+        target_yomitan=destination/'dictionaries'/'yomitan-index.sqlite3'
+        with sqlite3.connect(yomitan_index.as_uri()+'?mode=ro',uri=True) as original_db, sqlite3.connect(target_yomitan) as target:
+            original_db.backup(target)
+            if target.execute('PRAGMA quick_check').fetchone()[0]!='ok':raise ValueError('Yomitan index verification failed.')
+        copied.append({'path':target_yomitan.relative_to(destination).as_posix(),'bytes':target_yomitan.stat().st_size,'sha256':checksum(target_yomitan)})
     manifest={'runtime_url':RUNTIME_URL,'runtime_sha256':RUNTIME_SHA256,'dictionaries':[{'code':d['code'],'name':d['name']} for d in dictionaries],'files':copied,'total_dictionary_bytes':sum(item['bytes'] for item in copied)}
     (destination/'bundle-manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
     print(json.dumps({'folder':str(destination),'dictionaries':len(dictionaries),'files':len(copied),'GB':manifest['total_dictionary_bytes']/1e9}),flush=True)
