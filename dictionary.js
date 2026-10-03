@@ -133,6 +133,20 @@
     if(first)choose(first);else{currentCode='';tabs.append(entries);entries.textContent='No dictionaries selected. Open “Choose dictionaries” to enable one.';frame.removeAttribute('src');setEmpty('還沒有選擇辭典','按上方的清單圖示選擇要查的辭典 · Open the list icon to choose dictionaries.');}
   }
   const tabs=document.getElementById('dict-tabs'),entries=document.getElementById('dict-entries'),frame=document.getElementById('dict-frame');
+  // Each search owns its entry positions, so Back/Forward restore that visit.
+  let navigation={positions:new Map(),entries:new Map()},loadedEntry=null;
+  const entryKey=(code,row)=>JSON.stringify([code,String(row.id),row.anchor||'']);
+  function rememberEntryPosition(){
+    if(!loadedEntry)return;
+    try{
+      if(frame.contentDocument===loadedEntry.doc){
+        loadedEntry.owner.positions.set(loadedEntry.key,{x:frame.contentWindow.scrollX,y:frame.contentWindow.scrollY});
+      }
+    }catch{}
+  }
+  function copyNavigation(source=navigation){
+    return {positions:new Map(source.positions),entries:new Map(source.entries)};
+  }
   let dictionaryZoom=100;
   try{const saved=Number(localStorage.getItem('fortune-dictionary-zoom'));if(saved>=70&&saved<=200)dictionaryZoom=saved;}catch{}
   const zoomControls=document.createElement('span');zoomControls.className='dict-zoom-controls';
@@ -281,7 +295,7 @@
   frame.addEventListener('load',()=>{
     // Entries stay sandboxed; the parent can read selections in local documents.
     let entryDocument;try{entryDocument=frame.contentDocument;}catch{return;}
-    if(!entryDocument)return;
+    if(!entryDocument||entryDocument.URL!==frame.src||!currentEntry)return;
     try{const code=new URL(frame.src,location.href).searchParams.get('code');if(code&&entryDocument.body)entryDocument.body.dataset.dict=code;}catch{}
     applyDictionaryFont();
     applyDictionaryZoom();
@@ -292,7 +306,9 @@
     const anchor=new URL(frame.src,location.href).searchParams.get('anchor');
     const target=anchor&&(entryDocument.getElementById(anchor)||entryDocument.getElementsByName(anchor)[0]);
     const innerWindow=frame.contentWindow;
-    if(innerWindow)innerWindow.scrollTo({top:target?target.getBoundingClientRect().top+innerWindow.scrollY:0,left:0,behavior:'instant'});
+    const key=entryKey(currentCode,currentEntry),position=navigation.positions.get(key);
+    if(innerWindow)innerWindow.scrollTo({top:position?.y??(target?target.getBoundingClientRect().top+innerWindow.scrollY:0),left:position?.x??0,behavior:'instant'});
+    loadedEntry={doc:entryDocument,key,owner:navigation};
     enableSelectionSearch(entryDocument,true);
     entryDocument.addEventListener('click',event=>{
       const link=event.target.closest?.('a[data-lookup],a[data-external]');
@@ -328,13 +344,15 @@
   function rememberSearch(stack,saved){if(saved){stack.push(saved);if(stack.length>5)stack.shift();}}
   function snapshotSearch(){
     if(!spokenWord)return null;
-    return {word:spokenWord,dictionaries,frequencies,code:currentCode,entry:currentEntry};
+    rememberEntryPosition();
+    return {word:spokenWord,dictionaries,frequencies,code:currentCode,entry:currentEntry,navigation:copyNavigation()};
   }
   function restoreSearch(saved){
+    rememberEntryPosition();loadedEntry=null;
+    navigation=saved.navigation?copyNavigation(saved.navigation):{positions:new Map(),entries:new Map()};
+    if(saved.entry)navigation.entries.set(saved.code,saved.entry);
     spokenWord=saved.word;input.value=saved.word;dictionaries=saved.dictionaries;frequencies=saved.frequencies||[];renderFrequencies();currentCode=saved.code;panel.hidden=false;if(panel.querySelector('.dictionary-disclosure'))panel.querySelector('.dictionary-disclosure').open=true;
     renderChoices();renderTabs();
-    const dictionary=dictionaries.find(d=>d.code===saved.code&&selectedCodes.has(d.code));
-    if(dictionary&&saved.entry)openEntry(dictionary,saved.entry);
     status.textContent='“'+saved.word+'” · Search restored.';wordLabel.textContent=saved.word;
   }
   back.onclick=()=>{
@@ -359,12 +377,14 @@
   dictionaryShortcutHint.textContent='A / D: previous / next dictionary with matches for this word. Skips empty dictionaries and wraps around (outside text fields).';
   helpBody.append(dictionaryShortcutHint);
   function openEntry(dictionary,row){
-    currentEntry=row;
+    rememberEntryPosition();loadedEntry=null;
+    currentEntry=row;navigation.entries.set(dictionary.code,row);
     const params=new URLSearchParams({code:dictionary.code,id:row.id,anchor:row.anchor||''});
     frame.src='/api/dictionary/entry?'+params;
     [...entries.children].forEach(b=>b.classList.toggle('active',b.dataset.entry===String(row.id)+'#'+row.anchor));
   }
   function choose(dictionary){
+    rememberEntryPosition();loadedEntry=null;
     currentEntry=null;
     currentCode=dictionary.code;
     [...tabs.children].forEach(b=>{const selected=b.dataset.code===dictionary.code;b.classList.toggle('active',selected);b.setAttribute('aria-pressed',String(selected));});
@@ -378,7 +398,8 @@
       drawEntryLabel(b,row,entryLabels.get(dictionary.code+':'+row.id));
       b.onclick=()=>openEntry(dictionary,row);entries.append(b);
     });
-    openEntry(dictionary,dictionary.entries[0]);
+    const remembered=navigation.entries.get(dictionary.code);
+    openEntry(dictionary,dictionary.entries.find(row=>remembered&&entryKey(dictionary.code,row)===entryKey(dictionary.code,remembered))||dictionary.entries[0]);
     loadEntryLabels(dictionary);
   }
   // Headword list: add the written (kanji) form, e.g. 高騰 above こうとう.
@@ -439,6 +460,7 @@
       await mainKenkyushaFirst(result.dictionaries);
       if(version!==requestVersion)return;
       if(previous&&previous.word!==word){rememberSearch(searchHistory,previous);forwardHistory.length=0;}
+      rememberEntryPosition();loadedEntry=null;navigation={positions:new Map(),entries:new Map()};
       spokenWord=word;panel.hidden=false;if(panel.querySelector('.dictionary-disclosure'))panel.querySelector('.dictionary-disclosure').open=true;dictionaries=result.dictionaries;frequencies=result.frequencies||[];renderFrequencies();currentCode='';renderChoices();renderTabs();
       status.textContent='“'+word+'” · '+dictionaries.filter(d=>d.entries?.length).length+' 本辭典有結果 · A / D 切換';
       wordLabel.textContent=word;rememberWord(word);window.dispatchEvent(new CustomEvent('reader-lookup',{detail:{word}}));

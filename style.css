@@ -712,3 +712,15 @@ mark{background:color-mix(in srgb,var(--accent-3) 45%,transparent);color:inherit
 .note-grammar>div{margin-top:8px;font-size:13.5px}
 .note-ex li{margin:4px 0}.note-ex small{display:block;color:var(--muted)}
 .script-link{margin:6px 0 0;align-self:flex-start;padding:6px 12px;font-size:12.5px;background:var(--tint-2);border-color:color-mix(in srgb,var(--accent-2) 45%,transparent)}
+
+/* iPhone Fable / Yohaku papers: quiet, flat surfaces and fine ink rules. */
+.preset-heading{grid-column:1/-1;margin:12px 0 2px;font:600 13px var(--font-ui);color:var(--muted)}
+.preset-art.ios-art{height:104px}
+.preset-art.ios-art svg{top:4px;right:calc(50% - 48px);width:96px;height:96px}
+.preset-name small{line-height:1.4;margin-top:4px}
+:root[data-design="fable"],:root[data-design="yohaku"]{
+ --wobble:3px;--wobble-sm:3px;--shadow:0 1px 0 var(--line);
+ --line-strong:color-mix(in srgb,var(--ink) 23%,transparent);
+}
+:root[data-design="fable"] #doodles,:root[data-design="yohaku"] #doodles{opacity:.8}
+:root[data-design="fable"] .topbar::after,:root[data-design="yohaku"] .topbar::after{height:1px;bottom:0;mask:none;-webkit-mask:none}

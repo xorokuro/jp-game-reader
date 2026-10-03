@@ -12,6 +12,12 @@
 .midashi{display:block!important;margin:0 0 .55em!important;padding:0 0 .45em!important;
  font-size:1.55em!important;font-weight:700!important;letter-spacing:.03em!important;line-height:1.4!important;color:var(--k-fg)!important;
  border-bottom:2px solid color-mix(in srgb,var(--k-num) 35%,transparent)!important}
+/* iPhone app: the headword is one run of text (reading, 【kanji】, old spelling). Keep each part whole
+   when it wraps, at a size that fits the page, with room above the rule; the old spelling is a small note. */
+html body .midashi{font-size:calc(var(--e-size,19px) * 1.3)!important;line-height:1.35!important;padding:0 0 .3em!important;margin:0 0 .5em!important;
+ word-break:keep-all;line-break:strict;font-family:var(--y-mincho,inherit)!important;font-weight:var(--k-headweight,700)!important}
+html body .midashi sub{font-size:.52em!important;font-weight:400!important;font-family:var(--e-font,inherit)!important;line-height:1!important;vertical-align:baseline!important;
+ margin-left:.35em;color:var(--k-muted)!important;white-space:nowrap}
 .honbun{display:block;line-height:1.85!important;color:var(--k-fg)!important}
 .honbun div{margin:0 0 0 .2em!important;padding:0!important;text-indent:0!important}
 .honbun>div{margin-top:.45em!important}
@@ -47,6 +53,7 @@
  background:color-mix(in srgb,var(--k-link) 10%,transparent)!important;border-radius:var(--k-wob)}
 
 /* pictures / media captions */
-.honbun div.media{color:var(--k-muted)!important;font-size:.85em!important}
+/* this copy of 広辞苑 has no picture file, so the empty picture frames and their credits are left out */
+.honbun div.media{display:none!important}
 .honbun img:is(.FIGs,.FIGc){max-width:min(100%,380px)!important;height:auto;border-radius:10px}
 .honbun .alpha-honbun{margin-left:1em!important}

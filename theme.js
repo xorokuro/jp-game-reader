@@ -24,6 +24,608 @@
    doodles:['#ffd27a','#9fd0ff','#f5a0c2','#c4b5ff'],motifs:['star','sparkle','moon','planet','kana','cat','dots','star'],fall:'sparkle'}
  };
  const ORDER=['washi','sakura','umi','sumi','matcha','engawa','momiji','hoshi'];
+ // iOS collections, verified against JapaneseReader-iPhone_39.
+ Object.assign(PRESETS,{
+  "yohaku": {
+    "zh": "余白 生成 Kinari",
+    "en": "Editorial · unbleached paper",
+    "group": "Yohaku",
+    "design": "yohaku",
+    "art": "editorial",
+    "mode": "light",
+    "paper": "#ece3cc",
+    "card": "#ece3cc",
+    "ink": "#1a1a18",
+    "accent": "#1c2b3f",
+    "accent2": "#b4c0aa",
+    "accent3": "#7a3b2b",
+    "spark": "#7a3b2b",
+    "muted": "#5a5f66",
+    "doodles": [
+      "#1c2b3f"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "yohaku-washi": {
+    "zh": "余白 和紙 Washi white",
+    "en": "Editorial · white washi",
+    "group": "Yohaku",
+    "design": "yohaku",
+    "art": "editorial",
+    "mode": "light",
+    "paper": "#f3f0e8",
+    "card": "#f3f0e8",
+    "ink": "#1a1a18",
+    "accent": "#22303f",
+    "accent2": "#b4c0aa",
+    "accent3": "#4f6578",
+    "spark": "#4f6578",
+    "muted": "#5f646a",
+    "doodles": [
+      "#22303f"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "yohaku-seiji": {
+    "zh": "余白 青磁 Celadon",
+    "en": "Editorial · celadon green",
+    "group": "Yohaku",
+    "design": "yohaku",
+    "art": "editorial",
+    "mode": "light",
+    "paper": "#dde3d7",
+    "card": "#dde3d7",
+    "ink": "#1b1f1c",
+    "accent": "#1f3a3a",
+    "accent2": "#b4c0aa",
+    "accent3": "#7a5a2e",
+    "spark": "#7a5a2e",
+    "muted": "#526058",
+    "doodles": [
+      "#1f3a3a"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "yohaku-kiri": {
+    "zh": "余白 霧 Fog blue",
+    "en": "Editorial · fog blue",
+    "group": "Yohaku",
+    "design": "yohaku",
+    "art": "editorial",
+    "mode": "light",
+    "paper": "#dce1e4",
+    "card": "#dce1e4",
+    "ink": "#181c21",
+    "accent": "#1c2b3f",
+    "accent2": "#b4c0aa",
+    "accent3": "#8a4b3a",
+    "spark": "#8a4b3a",
+    "muted": "#53606c",
+    "doodles": [
+      "#1c2b3f"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "yohaku-wara": {
+    "zh": "余白 藁半紙 Newsprint",
+    "en": "Editorial · 1980 newsprint",
+    "group": "Yohaku",
+    "design": "yohaku",
+    "art": "editorial",
+    "mode": "light",
+    "paper": "#e2d6b6",
+    "card": "#e2d6b6",
+    "ink": "#26221c",
+    "accent": "#2a2620",
+    "accent2": "#b4c0aa",
+    "accent3": "#2f5d73",
+    "spark": "#2f5d73",
+    "muted": "#5e574a",
+    "doodles": [
+      "#2a2620"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "yohaku-sumi": {
+    "zh": "余白 墨夜 Sumi night",
+    "en": "Editorial · dark",
+    "group": "Yohaku",
+    "design": "yohaku",
+    "art": "editorial",
+    "mode": "dark",
+    "paper": "#25292d",
+    "card": "#25292d",
+    "ink": "#e9e2d0",
+    "accent": "#e9e2d0",
+    "accent2": "#b4c0aa",
+    "accent3": "#d2a955",
+    "spark": "#d2a955",
+    "muted": "#a7a396",
+    "doodles": [
+      "#e9e2d0"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "fable": {
+    "zh": "糸 Fable · Paper",
+    "en": "The film · cream paper, wound ring, thread",
+    "group": "Fable",
+    "design": "fable",
+    "art": "film",
+    "mode": "light",
+    "paper": "#f5f0e4",
+    "card": "#f5f0e4",
+    "ink": "#2b2925",
+    "accent": "#34322d",
+    "accent2": "#dde2ce",
+    "accent3": "#b89a6a",
+    "spark": "#b04a3c",
+    "muted": "#6e695f",
+    "doodles": [
+      "#34322d"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "fable-sage": {
+    "zh": "糸 Fable · Meadow",
+    "en": "The film · pale sage",
+    "group": "Fable",
+    "design": "fable",
+    "art": "film",
+    "mode": "light",
+    "paper": "#dde2ce",
+    "card": "#dde2ce",
+    "ink": "#22251e",
+    "accent": "#2c3328",
+    "accent2": "#c6cfb4",
+    "accent3": "#9c8456",
+    "spark": "#a0453a",
+    "muted": "#5a6152",
+    "doodles": [
+      "#2c3328"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "fable-blush": {
+    "zh": "糸 Fable · Blossom",
+    "en": "The film · dusty pink",
+    "group": "Fable",
+    "design": "fable",
+    "art": "film",
+    "mode": "light",
+    "paper": "#ead9cf",
+    "card": "#ead9cf",
+    "ink": "#2c2421",
+    "accent": "#3d3330",
+    "accent2": "#dde2ce",
+    "accent3": "#a88a5e",
+    "spark": "#9e3f35",
+    "muted": "#6e5e58",
+    "doodles": [
+      "#3d3330"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "fable-dusk": {
+    "zh": "糸 Fable · Unfinished",
+    "en": "The film · warm grey",
+    "group": "Fable",
+    "design": "fable",
+    "art": "film",
+    "mode": "light",
+    "paper": "#d6d2c7",
+    "card": "#d6d2c7",
+    "ink": "#22211d",
+    "accent": "#2e2c28",
+    "accent2": "#c3c8b4",
+    "accent3": "#96804f",
+    "spark": "#973f33",
+    "muted": "#58544c",
+    "doodles": [
+      "#2e2c28"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "fable-night": {
+    "zh": "糸 Fable · One water",
+    "en": "The film · night, stars",
+    "group": "Fable",
+    "design": "fable",
+    "art": "film",
+    "mode": "dark",
+    "paper": "#211f1b",
+    "card": "#211f1b",
+    "ink": "#ede6d6",
+    "accent": "#e6dfce",
+    "accent2": "#3a3f34",
+    "accent3": "#c9a46a",
+    "spark": "#e39a7e",
+    "muted": "#a59e8e",
+    "doodles": [
+      "#e6dfce"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "fable-graph": {
+    "zh": "方眼 Cool S",
+    "en": "Graph-paper notebook, coloured-pencil doodles",
+    "group": "Fable",
+    "design": "fable",
+    "art": "graph",
+    "mode": "light",
+    "paper": "#f4f2e8",
+    "card": "#f4f2e8",
+    "ink": "#2c2d2a",
+    "accent": "#35362f",
+    "accent2": "#f3e592",
+    "accent3": "#8eb5a9",
+    "spark": "#c24e6e",
+    "muted": "#63665d",
+    "doodles": [
+      "#35362f"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "fable-sundown": {
+    "zh": "残照 Sundown",
+    "en": "Linocut sun, ochre rays, burnt orange",
+    "group": "Fable",
+    "design": "fable",
+    "art": "sundown",
+    "mode": "light",
+    "paper": "#f3e7cc",
+    "card": "#f3e7cc",
+    "ink": "#3a2618",
+    "accent": "#47301f",
+    "accent2": "#edd39a",
+    "accent3": "#d3a040",
+    "spark": "#c0582a",
+    "muted": "#76604b",
+    "doodles": [
+      "#47301f"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "fable-midnight": {
+    "zh": "月 Borrowed light",
+    "en": "A small moon keeps a lit window company",
+    "group": "Fable",
+    "design": "fable",
+    "art": "midnight",
+    "mode": "dark",
+    "paper": "#1b2033",
+    "card": "#1b2033",
+    "ink": "#efe7d3",
+    "accent": "#e7dec9",
+    "accent2": "#343b57",
+    "accent3": "#f1e2ae",
+    "spark": "#f2c46b",
+    "muted": "#a1a6b8",
+    "doodles": [
+      "#e7dec9"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "fable-mist": {
+    "zh": "雨 Underlight",
+    "en": "Watercolour rain, a pole and its wires",
+    "group": "Fable",
+    "design": "fable",
+    "art": "mist",
+    "mode": "light",
+    "paper": "#e4e8e2",
+    "card": "#e4e8e2",
+    "ink": "#1e2933",
+    "accent": "#293742",
+    "accent2": "#cad5e0",
+    "accent3": "#6f8cb0",
+    "spark": "#b9503c",
+    "muted": "#56636e",
+    "doodles": [
+      "#293742"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "fable-ballpoint": {
+    "zh": "ボールペン Ballpoint",
+    "en": "Blue biro on paper, red-pen marks",
+    "group": "Fable",
+    "design": "fable",
+    "art": "ballpoint",
+    "mode": "light",
+    "paper": "#f2ead8",
+    "card": "#f2ead8",
+    "ink": "#1d2c66",
+    "accent": "#24367a",
+    "accent2": "#dce1f2",
+    "accent3": "#b8352e",
+    "spark": "#b8352e",
+    "muted": "#5a6386",
+    "doodles": [
+      "#24367a"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "fable-echo": {
+    "zh": "応 Echo",
+    "en": "A dot calls out; rings and small worlds answer",
+    "group": "Fable",
+    "design": "fable",
+    "art": "echo",
+    "mode": "light",
+    "paper": "#f6f0da",
+    "card": "#f6f0da",
+    "ink": "#1f2130",
+    "accent": "#272a3b",
+    "accent2": "#f1dd8e",
+    "accent3": "#e2c24c",
+    "spark": "#d04a2f",
+    "muted": "#60616f",
+    "doodles": [
+      "#272a3b"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "fable-roots": {
+    "zh": "根 Roots",
+    "en": "White roots on slate, one red line",
+    "group": "Fable",
+    "design": "fable",
+    "art": "roots",
+    "mode": "dark",
+    "paper": "#1e2328",
+    "card": "#1e2328",
+    "ink": "#ece8de",
+    "accent": "#e3ded2",
+    "accent2": "#323c45",
+    "accent3": "#d8d2c4",
+    "spark": "#d9584a",
+    "muted": "#9ba3a8",
+    "doodles": [
+      "#e3ded2"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "fable-evening": {
+    "zh": "夕 Evening",
+    "en": "Watercolour dusk, a pylon and its wires",
+    "group": "Fable",
+    "design": "fable",
+    "art": "evening",
+    "mode": "light",
+    "paper": "#f2e7e6",
+    "card": "#f2e7e6",
+    "ink": "#2b2340",
+    "accent": "#382e52",
+    "accent2": "#e6d4e8",
+    "accent3": "#8d76c2",
+    "spark": "#d46a3a",
+    "muted": "#6a5f7a",
+    "doodles": [
+      "#382e52"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "fable-still": {
+    "zh": "刺し子 Still",
+    "en": "Indigo cloth, running stitches, a figure in gold",
+    "group": "Fable",
+    "design": "fable",
+    "art": "sashiko",
+    "mode": "dark",
+    "paper": "#1f2947",
+    "card": "#1f2947",
+    "ink": "#eee7d3",
+    "accent": "#e5ddc6",
+    "accent2": "#35416b",
+    "accent3": "#d9d2bc",
+    "spark": "#e0b54e",
+    "muted": "#a0a7be",
+    "doodles": [
+      "#e5ddc6"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "fable-ebru": {
+    "zh": "墨流し Ebru",
+    "en": "Marbled stones in navy and gold",
+    "group": "Fable",
+    "design": "fable",
+    "art": "ebru",
+    "mode": "light",
+    "paper": "#f3eddd",
+    "card": "#f3eddd",
+    "ink": "#1f2a5c",
+    "accent": "#26336b",
+    "accent2": "#ebdca8",
+    "accent3": "#24306b",
+    "spark": "#c0902e",
+    "muted": "#5c6486",
+    "doodles": [
+      "#26336b"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "fable-cyanotype": {
+    "zh": "青写真 Cyanotype",
+    "en": "White sprigs on blue",
+    "group": "Fable",
+    "design": "fable",
+    "art": "cyanotype",
+    "mode": "light",
+    "paper": "#f2eee0",
+    "card": "#f2eee0",
+    "ink": "#21367c",
+    "accent": "#2b4594",
+    "accent2": "#d6dff3",
+    "accent3": "#3554a8",
+    "spark": "#bf553b",
+    "muted": "#5f6c96",
+    "doodles": [
+      "#2b4594"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "fable-transit": {
+    "zh": "路線図 Transit",
+    "en": "A route map and a figure in stripes",
+    "group": "Fable",
+    "design": "fable",
+    "art": "transit",
+    "mode": "light",
+    "paper": "#e9f0ea",
+    "card": "#e9f0ea",
+    "ink": "#1f2a2e",
+    "accent": "#2a373c",
+    "accent2": "#f3dd98",
+    "accent3": "#2f6fb3",
+    "spark": "#d8492f",
+    "muted": "#5a676b",
+    "doodles": [
+      "#2a373c"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "fable-oneline": {
+    "zh": "一筆 One line",
+    "en": "Mustard ground, one wandering line",
+    "group": "Fable",
+    "design": "fable",
+    "art": "oneline",
+    "mode": "light",
+    "paper": "#f4ecd6",
+    "card": "#f4ecd6",
+    "ink": "#241e12",
+    "accent": "#2e2616",
+    "accent2": "#efcf83",
+    "accent3": "#d9a036",
+    "spark": "#b5701f",
+    "muted": "#6b604a",
+    "doodles": [
+      "#2e2616"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "fable-phool": {
+    "zh": "花 Phool patti",
+    "en": "Truck-art green, yellow figure, red flowers",
+    "group": "Fable",
+    "design": "fable",
+    "art": "phool",
+    "mode": "dark",
+    "paper": "#21402c",
+    "card": "#21402c",
+    "ink": "#f3ead0",
+    "accent": "#efe3c2",
+    "accent2": "#36593f",
+    "accent3": "#d9483b",
+    "spark": "#f0b43a",
+    "muted": "#aabda7",
+    "doodles": [
+      "#efe3c2"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  },
+  "fable-doublure": {
+    "zh": "見返し Doublure",
+    "en": "Gold-tooled leather",
+    "group": "Fable",
+    "design": "fable",
+    "art": "doublure",
+    "mode": "dark",
+    "paper": "#25170f",
+    "card": "#25170f",
+    "ink": "#efe2c4",
+    "accent": "#ddbd6c",
+    "accent2": "#3f2b1d",
+    "accent3": "#c9a24b",
+    "spark": "#e3c26a",
+    "muted": "#ab987c",
+    "doodles": [
+      "#ddbd6c"
+    ],
+    "motifs": [
+      "star"
+    ],
+    "fall": ""
+  }
+});
+ const IOS_ORDER=["fable", "fable-sage", "fable-blush", "fable-dusk", "fable-night", "fable-graph", "fable-sundown", "fable-midnight", "fable-mist", "fable-ballpoint", "fable-echo", "fable-roots", "fable-evening", "fable-still", "fable-ebru", "fable-cyanotype", "fable-transit", "fable-oneline", "fable-phool", "fable-doublure", "yohaku", "yohaku-washi", "yohaku-seiji", "yohaku-kiri", "yohaku-wara", "yohaku-sumi"];
  const FONTS={
   kyokasho:{zh:'教科書體',en:'Textbook',css:'"UD Digi Kyokasho N-R","UD デジタル 教科書体 N-R","UD Digi Kyokasho NK-R","Klee One","Yu Mincho",serif'},
   gothic:{zh:'黑體',en:'Gothic',css:'"Yu Gothic UI","Yu Gothic","Noto Sans JP","Hiragino Kaku Gothic ProN","Meiryo",sans-serif'},
@@ -81,7 +683,7 @@
   const vars={paper:p.paper,'paper-ink':p.paperInk,card:p.card,ink:p.ink,accent:p.accent,'accent-text':p.accentText,'accent-2':p.accent2,'accent-3':p.accent3,'on-accent':p.onAccent,
    'jp-font':FONTS[theme.font].css,'jp-size':theme.jp+'px','translation-size':theme.translation+'px','line-space':theme.spacing,'reader-width':theme.width+'px',rounding:theme.radius+'px'};
   for(const [k,v] of Object.entries(vars))root.style.setProperty('--'+k,v);
-  root.dataset.mode=p.mode;root.dataset.preset=theme.preset;
+  root.dataset.mode=p.mode;root.dataset.preset=theme.preset;root.dataset.design=p.design||'washi';
   root.style.colorScheme=p.mode;
   root.classList.toggle('no-grain',!theme.grain);
   root.classList.toggle('no-falling',!theme.falling);
@@ -162,12 +764,85 @@
  };
  const KANA='あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをんアイウエオカキクケコサシスセソ';
  let lastDoodle='';
+ // Browser vector adaptations of the iOS Fable / Yohaku drawings.
+ // Palette values come from ios/Sources/Palette.swift; no network assets needed.
+ function iosArt(p,background=false){
+  const ink=p.accent,t=p.accent3,s=p.spark,paper=p.paper;
+  const path=(d,c=ink,w=1,extra='')=>`<path d="${d}" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" ${extra}/>`;
+  const circle=(x,y,r,c,fill='none',extra='')=>`<circle cx="${x}" cy="${y}" r="${r}" stroke="${c}" fill="${fill}" ${extra}/>`;
+  const rect=(x,y,w,h,c,extra='')=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${c}" ${extra}/>`;
+  const rand=rng(71);let a='';
+  const star=(x,y,c=s)=>path(`M${x-2} ${y}h4M${x} ${y-2}v4`,c,.7);
+  const figure=()=>path('M50 27c-9-2-15 4-14 12 0 7 5 11 12 11l-3 9-12 6-7 29h48l-8-29-12-6-1-10c9-3 12-10 9-16-2-5-7-7-12-6Z',s,1.1);
+  const sprig=(x,y,c)=>path(`M${x} ${y}q-8-15 0-30m-3 18q-12-1-10-8 9 0 10 8m0-9q9-1 10-9-10 1-10 9`,c,.8);
+  switch(p.art){
+   case 'film':
+    for(let i=0;i<12;i++)a+=`<ellipse cx="${50+Math.sin(i)*.9}" cy="${47+Math.cos(i)*.7}" rx="${31+i*.22}" ry="${32-i*.1}" fill="none" stroke="${ink}" stroke-width=".55" transform="rotate(${i*17} 50 47)"/>`;
+    a+=path('M54 0C20 23 80 61 43 100',t,.8)+figure()+star(50,20);
+    break;
+   case 'graph':
+    for(let i=5;i<100;i+=9)a+=path(`M${i} 5V95M5 ${i}H95`,t,.45,'opacity=".5"');
+    a+=path('M28 51L75 47',p.accent2,17)+path('M33 25L50 12 67 25M33 25V41L50 59V75M50 25V41L67 59V75L50 88 33 75V59L41 50M67 25V41L59 50',ink,1.3)+star(83,19)+sprig(16,89,'#5e8f4e');break;
+   case 'sundown':
+    for(let i=0;i<13;i++){const v=Math.PI+.12+i*(Math.PI-.24)/12;for(let j=-1;j<2;j++)a+=path(`M${50+Math.cos(v+j*.025)*28} ${70+Math.sin(v+j*.025)*28}L${50+Math.cos(v+j*.025)*47} ${70+Math.sin(v+j*.025)*47}`,t,.6,i%2?'stroke-dasharray="1 3"':'');}
+    a+=`<path d="M26 70a24 24 0 0 1 48 0Z" fill="${s}" fill-opacity=".25" stroke="${s}"/>`;
+    for(let y=48;y<70;y+=3){let dx=Math.sqrt(576-(70-y)**2);a+=path(`M${50-dx} ${y}h${2*dx}`,s,.7);}
+    a+=path('M6 70H94M16 78Q32 75 50 78T84 78M24 85Q39 82 50 85T76 85M32 92H68');break;
+   case 'midnight':
+    a+=circle(70,27,24,'none',t,'opacity=".07"')+circle(70,27,10,'none',t);
+    for(let i=0;i<10;i++)a+=star(6+rand()*87,5+rand()*35,t);
+    a+=path('M60 36Q56 62 38 68',t,1,'stroke-dasharray=".5 4"')+path('M10 88V67L30 52 49 67V88M8 89H53',ink,.8)+rect(23,70,12,12,s)+path('M29 70V82M23 76H35',paper,.8);break;
+   case 'mist':case 'evening':
+    for(let i=0;i<7;i++)a+=`<ellipse cx="${10+i*14}" cy="${20+Math.sin(i)*10}" rx="28" ry="${15+i}" fill="${i%2?t:p.accent2}" opacity=".12"/>`;
+    if(p.art==='evening'){
+     a+=path('M39 95L49 25 61 95M45 48H55M43 63H57M40 81H60M45 48L57 63 40 81 61 95M55 48L43 63 60 81 39 95M35 42H65M31 57H69',ink,.8);
+    }else{a+=path('M49 24V97M32 39H68M38 35V43M61 35V43M45 25H55',ink,1.2);for(let i=0;i<27;i++){let x=rand()*100,y=rand()*80;a+=path(`M${x} ${y}l-2 7`,t,.45,'opacity=".5"');}}
+    a+=path('M0 30Q24 50 38 39M61 39Q80 52 100 35M0 49Q26 65 38 43M65 43Q80 66 100 49',ink,.6);break;
+   case 'ballpoint':
+    for(let i=0;i<16;i++)a+=path(`M${22+i*.5} 80C${-6+i} 30 ${87-i} 12 ${75-i*.3} 67S18 90 28 42`,ink,.45,'opacity=".65"');
+    a+=path('M18 85Q50 79 86 82M72 18l8 8m0-8-8 8',s,1)+figure();break;
+   case 'echo':
+    for(let i=0;i<7;i++)a+=circle(47,49,9+i*5,i%2?t:ink,'none',`stroke-width="${i%2?.8:1.2}"`);
+    a+=circle(47,49,3,s,s)+circle(79,24,7,ink)+circle(18,83,5,s)+star(87,78);break;
+   case 'roots':{
+    const branch=(x,y,angle,len,depth)=>{let xx=x+Math.cos(angle)*len,yy=y+Math.sin(angle)*len; a+=path(`M${x} ${y}Q${(x+xx)/2+rand()*3} ${(y+yy)/2} ${xx} ${yy}`,ink,.2+depth*.13);if(depth){branch(xx,yy,angle-.3-rand()*.3,len*.7,depth-1);branch(xx,yy,angle+.3+rand()*.3,len*.7,depth-1);}};
+    branch(50,4,Math.PI/2,24,6);a+=path('M60 0Q42 55 58 100',s,.9);break;}
+   case 'editorial':
+    a+=rect(15,18,28,62,ink)+circle(64,35,18,ink,p.accent2)+path('M12 89H90',ink,.8)+path('M52 62L87 62 87 80 52 80Z',s,.8);break;
+   case 'sashiko':
+    a+=rect(5,5,90,90,p.accent2,'rx="3"');for(let k=11;k<95;k+=12)a+=path(`M5 ${k}H95M${k} 5V95`,ink,.65,'stroke-dasharray="3.5 3" opacity=".6"');a+=figure();break;
+   case 'ebru':
+    for(let i=0;i<32;i++){let x=8+rand()*84,y=8+rand()*84,r=3+rand()*5;for(let j=0;j<3;j++)a+=`<ellipse cx="${x}" cy="${y}" rx="${r-j}" ry="${(r-j)*.65}" fill="none" stroke="${i%3?t:s}" stroke-width=".7"/>`; }a+=figure();break;
+   case 'cyanotype':
+    a+=rect(5,5,90,90,t,'rx="3"');for(let i=0;i<8;i++)a+=sprig(12+i*10,42+(i%2)*45,paper);a+=figure();break;
+   case 'transit':
+    for(let i=0;i<5;i++){let c=['#2f6fb3','#d8492f','#d3a040','#5e8f4e','#865894'][i];a+=path(`M${8+i*17} 5V${25+i*8}L${80-i*15} ${63+i*5}V96`,c,2);for(let j=0;j<3;j++)a+=circle(8+i*17,10+j*7,1.5,c,paper);}a+=figure();break;
+   case 'oneline':
+    a+=rect(5,5,90,90,t,'rx="3"')+path('M9 88C80 80 15 12 54 17S87 45 53 47 24 91 89 86M48 25C30 48 77 23 60 53S42 69 46 90',ink,1.4);break;
+   case 'phool':
+    for(let i=0;i<10;i++){let x=12+i%3*33,y=15+Math.floor(i/3)*24;for(let j=0;j<5;j++)a+=circle(x+Math.cos(j*1.256)*4,y+Math.sin(j*1.256)*4,3,'none',t);a+=circle(x,y,2,'none',s);}a+=figure();break;
+   case 'doublure':
+    a+=`<rect x="7" y="7" width="86" height="86" rx="4" fill="none" stroke="${t}"/><rect x="11" y="11" width="78" height="78" rx="2" fill="none" stroke="${t}" stroke-dasharray="1 2"/>`;
+    for(let i=0;i<8;i++)a+=sprig(18+i*9,85,t);a+=figure();break;
+  }
+  if(!background)return `<svg viewBox="0 0 100 100" aria-hidden="true">${a}</svg>`;
+  let backdrop='';
+  if(p.art==='graph')for(let i=0;i<1200;i+=18)backdrop+=path(`M${i} 0V860M0 ${i}H1180`,t,i%90===0?.6:.4,'opacity=".35"');
+  if(['mist','evening','midnight'].includes(p.art))backdrop+=`<ellipse cx="930" cy="70" rx="430" ry="230" fill="${t}" opacity=".08"/>`;
+  const scale=theme.density==='calm'?1.5:2.2;
+  backdrop+=`<g transform="translate(920 90) scale(${scale})" opacity=".46">${a}</g><g transform="translate(12 530) scale(1.3)" opacity=".22">${a}</g>`;
+  if(theme.density==='lively')backdrop+=`<g transform="translate(500 360) scale(1.5)" opacity=".18">${a}</g>`;
+  for(let i=0;i<(theme.density==='lively'?30:10);i++)backdrop+=star(rand()*1180,rand()*860,t);
+  return `<svg viewBox="0 0 1180 860" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${backdrop}</svg>`;
+ }
+
  function drawDoodles(p){
   const host=document.getElementById('doodles');if(!host)return;
   const count=DENSITY[theme.density];
   const signature=[theme.preset,count,p.paper,p.doodles?.join()].join('|');
   if(signature===lastDoodle)return;lastDoodle=signature;
   if(!count){host.replaceChildren();return;}
+  if(p.art){host.innerHTML=iosArt(p,true);return;}
   const W=1180,H=860,r=rng([...theme.preset].reduce((a,c)=>a*31+c.charCodeAt(0),7)),placed=[];
   const colors=p.doodles||[p.accent,p.accent2,p.accent3];
   let body='';
@@ -246,6 +921,8 @@
   const art=make('span','preset-art');
   const strokes=(MOTIFS[p.motifs[0]]||MOTIFS.star)();
   art.innerHTML=`<svg viewBox="-30 -30 60 60" aria-hidden="true"><g stroke="${p.doodles[0]}" stroke-linecap="round" stroke-linejoin="round">${strokes.map(s=>`<path d="${smooth(poly(s.at?move(s.pts,...s.at):s.pts,22),!!s.closed)}" fill="${s.fill?p.doodles[0]:'none'}" fill-opacity="${s.fill||0}" stroke-width="1.8"/>`).join('')}</g></svg><i></i><i></i>`;
+  if(p.art){art.innerHTML=iosArt(p);art.classList.add('ios-art');}
+  b.title=p.en;
   const names=make('span','preset-name');names.append(make('b','',p.zh),make('small','',p.en));
   b.append(art,names);
   b.onclick=()=>{theme.preset=key;theme.custom={};apply();};
@@ -254,7 +931,10 @@
  let pickers={};
  function build(){
   const presets=$('theme-presets');if(!presets)return;
-  presets.replaceChildren(...ORDER.map(preview));
+  presets.replaceChildren();
+  for(const [label,keys] of [['iPhone · Fable',IOS_ORDER.filter(k=>PRESETS[k].group==='Fable')],['iPhone · 余白 Yohaku',IOS_ORDER.filter(k=>PRESETS[k].group==='Yohaku')],['經典 · Classic',ORDER]]){
+   presets.append(make('h4','preset-heading',label),...keys.map(preview));
+  }
   segmented($('theme-density'),[['none','無'],['calm','少少'],['normal','適中'],['lively','熱鬧']],()=>theme.density,v=>theme.density=v);
   segmented($('theme-font'),Object.entries(FONTS).map(([k,v])=>[k,v.zh]),()=>theme.font,v=>theme.font=v);
   for(const [id,key] of [['theme-grain','grain'],['theme-falling','falling']]){const box=$(id);box.onchange=()=>{theme[key]=box.checked;apply();};}
@@ -272,7 +952,7 @@
  }
  function syncControls(){
   if(!$('theme-presets'))return;
-  for(const b of $('theme-presets').children)b.setAttribute('aria-pressed',String(b.dataset.preset===theme.preset));
+  for(const b of $('theme-presets').querySelectorAll('button'))b.setAttribute('aria-pressed',String(b.dataset.preset===theme.preset));
   $('theme-density').sync?.();$('theme-font').sync?.();
   $('theme-grain').checked=theme.grain;$('theme-falling').checked=theme.falling;
   for(const s of sliders)s();

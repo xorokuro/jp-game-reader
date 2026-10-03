@@ -21,7 +21,8 @@
 }
 :root[data-scheme="dark"]{--e-ex:#9ec2ff;color-scheme:dark}
 :root[data-font="sans"]{--e-font:var(--e-sans)}
-html,body{overscroll-behavior:contain;overflow-anchor:none}
+/* Let wheel/touch scrolling continue onto the reader at definition boundaries. */
+html,body{overscroll-behavior:auto;overflow-anchor:none}
 html,body{background:var(--e-bg)!important;color:var(--e-fg)!important}
 body{
  margin:0!important;padding:18px clamp(16px,5vw,30px) 56px!important;

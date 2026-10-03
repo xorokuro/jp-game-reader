@@ -4,7 +4,9 @@
 
 /* Result height changes must not move the outer page's reading position. */
 html,body{overflow-anchor:none}
-#dict-entries,#dict-choices,#dict-tabs{overscroll-behavior:contain}
+/* Lists scroll themselves first, then hand off to the reader at their edges. */
+#dict-entries,#dict-tabs{overscroll-behavior:auto}
+#dict-choices{overscroll-behavior:contain}
 
 /* Reader + dictionary workspace ---------------------------------------------- */
 #reader-workspace{
