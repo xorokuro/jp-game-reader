@@ -5,6 +5,9 @@ It reads an already extracted, ordered UTF-8 JSON script. It does not open game
 executables, encrypted archives, PDFs, EPUBs, CSVs or raw engine scripts directly.
 Convert those into the format below first.
 
+Need an AI assistant to extract your local game files? Copy the
+[ready-to-use extraction prompt](EXTRACT-SCRIPT-PROMPT.md) and fill in your folders.
+
 ## Load and switch scripts
 
 1. Open **台本 · Script → 載入台本 · Load script** and select a `.json` file.
