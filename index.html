@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#f3eadb">
 <title>Japanese Reader · 日本語リーダー</title>
-<link rel="stylesheet" href="style.css?v=ios-presets-1">
+<link rel="stylesheet" href="style.css?v=multi-script-1">
 <link rel="stylesheet" href="dictionary.css?v=scroll-1">
 <script src="/portable-preferences.js"></script>
 <script src="theme.js?v=ios-presets-1"></script>
@@ -219,6 +219,6 @@ translationToggle.onchange=async()=>{try{const r=await fetch('/api/translation',
 setInterval(async()=>{try{const r=await fetch('/api/state');const s=await r.json();if(s.translation){translationToggle.checked=s.translation.enabled;document.getElementById('translation-state').textContent=s.translation.status;}}catch{}},1600);
 document.addEventListener('selectionchange',()=>{const active=document.activeElement;if(active&&(active.matches('input,textarea')||active.isContentEditable))return;const selection=window.getSelection();if(!selection||selection.isCollapsed)return;const text=selection.toString().trim();if(text&&text.length<120)document.getElementById('lookup-word').value=text;});
 document.getElementById('lookup-online').onclick=()=>{const w=document.getElementById('lookup-word').value.trim();if(w)window.open('https://jisho.org/search/'+encodeURIComponent(w),'_blank','noopener');};
-</script><script src="dictionary.js?v=position-1"></script><script src="deepl-web.js"></script><script src="reader.js?v=washi-2"></script><script src="script.js?v=1"></script>
+</script><script src="dictionary.js?v=position-1"></script><script src="deepl-web.js"></script><script src="reader.js?v=washi-2"></script><script src="script.js?v=multi-script-1"></script>
 </body>
 </html>

@@ -328,7 +328,7 @@ def main():
     if args.no_capture:settings['capture_mode']='paste'
     journal.save_text=settings['capture_mode'] in ('obs','window')
     # Extracted game scripts: readable/searchable in the 台本 tab, and used to correct OCR.
-    library=script_library.Library();recorder=Recorder(journal,Matcher([]))
+    library=script_library.Library(Path(args.database).parent/'scripts');recorder=Recorder(journal,Matcher([]))
     script_state={'mode':settings.get('script_match','auto'),'active':None,'title':'','status':'Loading scripts…'}
     def choose_matcher():
         try:
@@ -434,6 +434,8 @@ def main():
                 if p=='/api/local-models':
                     import local_translate
                     return self.send(local_translate.models())
+                if p=='/api/script/template':
+                    return self.send(script_library.template())
                 if p=='/api/script/list':
                     if not library.scripts:library.refresh()
                     return self.send({'scripts':[s.info() for s in library.scripts.values()],'match':dict(script_state)})
@@ -492,7 +494,8 @@ def main():
             if not self.allowed() or self.headers.get('Origin')!=origin:return self.send({'error':'Local requests only'},403)
             try:
                 length=int(self.headers.get('Content-Length','0'))
-                if length>1000000:raise ValueError('Request too large')
+                maximum=script_library.MAX_IMPORT_BYTES if self.path=='/api/script/import' else 1000000
+                if length<0 or length>maximum:raise ValueError('Request too large')
                 body=json.loads(self.rfile.read(length) or b'{}')
                 if self.path=='/api/preferences':
                     import preferences
@@ -562,6 +565,10 @@ def main():
                             restart.set()
                             if worker[0] and worker[0].poll() is None:worker[0].terminate()
                     return self.send({'ok':True,'retry':dict(state['retry'])})
+                elif self.path=='/api/script/import':
+                    imported=library.import_script(body)
+                    threading.Thread(target=choose_matcher,daemon=True).start()
+                    return self.send({'script':imported})
                 elif self.path=='/api/script/match':
                     mode=str(body.get('mode','auto'))
                     if mode not in ('auto','off') and mode not in library.scripts:raise ValueError('Unknown script.')

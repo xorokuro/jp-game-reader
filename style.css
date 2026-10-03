@@ -655,7 +655,7 @@ section.current[data-view="script"] .card-head>:not(.view-tabs){display:none!imp
 .script-jump{display:inline-flex;align-items:center;gap:6px}
 .script-jump input{width:88px;padding:5px 8px;font-size:13px}
 .script-jump button{padding:5px 12px;font-size:12.5px}
-.script-list{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:12px;padding:4px 6px 18px 2px;overscroll-behavior:contain;scroll-padding:40px}
+.script-list{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:12px;padding:4px 6px 18px 2px;overscroll-behavior:auto;scroll-padding:40px}
 .script-list.loading{opacity:.6;transition:opacity .2s}
 .script-sentinel{height:1px;flex:none}
 .script-empty{display:flex;flex-direction:column;align-items:center;gap:6px;padding:40px 10px;color:var(--muted);text-align:center}
@@ -724,3 +724,23 @@ mark{background:color-mix(in srgb,var(--accent-3) 45%,transparent);color:inherit
 }
 :root[data-design="fable"] #doodles,:root[data-design="yohaku"] #doodles{opacity:.8}
 :root[data-design="fable"] .topbar::after,:root[data-design="yohaku"] .topbar::after{height:1px;bottom:0;mask:none;-webkit-mask:none}
+
+/* Script controls stay visible while the lines scroll, including on narrow screens. */
+#reader-workspace section.current[data-view="script"]{display:flex;flex-direction:column;height:var(--ws-h,calc(100dvh - 104px));min-height:520px}
+#script-view{overflow:hidden}
+#script-view>:not(.script-list){flex-shrink:0}
+.script-bar{flex-wrap:wrap}
+.script-search{min-width:180px}
+#script-pick{min-width:0;max-width:min(220px,100%)}
+.script-format{font-size:12px}
+.script-format[open]{max-height:160px;overflow:auto}
+.script-format p{margin:6px 0}
+.script-format button,.script-format a{margin:4px 8px 4px 0}
+#script-import-status:empty{display:none}
+#script-import-status{font-size:12px;max-height:64px;overflow:auto}
+.script-filters{max-height:190px;overflow:auto}
+@media(max-width:600px){.script-search{flex-basis:100%}#script-pick{flex:1}}
+
+/* Reserve action-row space so hover/selection cannot shift a restored reading position. */
+.script-list .script-line .sl-actions{max-height:none;overflow:visible;pointer-events:none;transition:opacity .15s ease}
+.script-list .script-line:is(:hover,.active,:focus-within) .sl-actions{pointer-events:auto}

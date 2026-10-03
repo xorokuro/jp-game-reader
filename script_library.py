@@ -4,11 +4,15 @@ A script folder contains ``script.json`` ({"game": ..., "rows": [{source, id, ki
 speaker, ja, en, zh, ...}]}) and optionally ``annotations.json`` ({"items": {
 "source|id": {...}}}). Folders are found in:
 
+* UI imports in ``scripts/<script_id>/`` beside the current library database,
 * ``scripts/<name>/`` inside the reader folder, and
 * every path listed (one per line) in ``scripts/paths.txt`` or ``JP_READER_SCRIPTS``.
 
 Scripts stay outside Git: they are personal extractions of commercial games.
 """
+import hashlib
+import shutil
+import tempfile
 import json
 import os
 import re
@@ -29,6 +33,65 @@ def clean(text):
 def slug(text):
     text = unicodedata.normalize('NFKC', text).casefold()
     return re.sub(r'[^0-9a-z]+', '-', text).strip('-')[:48] or 'script'
+
+
+MAX_IMPORT_BYTES = 64 * 1024 * 1024
+
+
+def template():
+    return {'script_id': 'sample-novel', 'game': 'Sample Visual Novel', 'rows': [
+        {'source': 'chapter01', 'id': '001', 'kind': 'dialogue', 'speaker': '春',
+         'ja': '今日はいい天気ですね。', 'en': 'The weather is lovely today.', 'zh': '今天天氣真好。'},
+        {'source': 'chapter01', 'id': '002', 'kind': 'dialogue', 'speaker': '',
+         'ja': '窓を開けると、涼しい風が入ってきた。'}]}
+
+
+def validate_import(data):
+    """Validate the entire upload before creating files; keep legacy disk loads compatible."""
+    if not isinstance(data, dict) or not isinstance(data.get('game'), str) or not data['game'].strip():
+        raise ValueError('A script needs a non-empty game title and a rows array.')
+    title = data['game'].strip()
+    if len(title) > 200:
+        raise ValueError('The game title must be 200 characters or fewer.')
+    identity = data.get('script_id', '')
+    if not isinstance(identity, str) or (identity and not re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,63}', identity)):
+        raise ValueError('script_id must use 1–64 lowercase letters, digits, hyphens or underscores.')
+    if identity in ('auto', 'off', 'con', 'prn', 'aux', 'nul') or re.fullmatch(r'(com|lpt)[1-9]', identity):
+        raise ValueError('This script_id is reserved. Choose a different identifier, such as my-novel.')
+    identity = identity or slug(title) + '-' + hashlib.sha256(title.encode('utf-8')).hexdigest()[:8]
+    rows = data.get('rows')
+    if not isinstance(rows, list) or not rows or len(rows) > 200000:
+        raise ValueError('rows must contain between 1 and 200,000 lines.')
+    result, seen = [], set()
+    for n, row in enumerate(rows, 1):
+        if not isinstance(row, dict):
+            raise ValueError(f'Line {n}: expected an object.')
+        out = {}
+        for name in ('source', 'id', 'kind', 'speaker', 'ja', 'en', 'zh'):
+            value = row.get(name, '')
+            if name == 'id' and isinstance(value, int) and not isinstance(value, bool):
+                value = str(value)
+            if not isinstance(value, str):
+                raise ValueError(f'Line {n}: {name} must be text, not null, a list or an object.')
+            if len(value) > 100000:
+                raise ValueError(f'Line {n}: {name} exceeds 100,000 characters.')
+            out[name] = value
+        out['source'] = out['source'] or 'main'
+        out['id'] = out['id'] or str(n)
+        out['kind'] = out['kind'] or 'dialogue'
+        if '|' in out['source'] or '|' in out['id']:
+            raise ValueError(f'Line {n}: source and id cannot contain |.')
+        if out['kind'] not in KINDS:
+            raise ValueError(f'Line {n}: kind must be dialogue, mail, tip, ui or extra.')
+        if not any(clean(out[k]).strip() for k in ('ja', 'en', 'zh')):
+            raise ValueError(f'Line {n}: provide text in ja, en or zh.')
+        key = (out['source'], out['id'])
+        if key in seen:
+            raise ValueError(f'Line {n}: duplicate source/id pair: {key[0]} | {key[1]}.')
+        seen.add(key)
+        result.append(out)
+    return {'script_id': identity, 'game': title, 'rows': result}
+
 
 
 def folders():
@@ -74,10 +137,12 @@ class Script:
         with self.lock:
             if self.rows is not None:
                 return self
-            data = json.loads(self.path.read_text(encoding='utf-8'))
+            data = json.loads(self.path.read_text(encoding='utf-8-sig'))
             rows = data['rows'] if isinstance(data, dict) else data
             self.title = (data.get('game') if isinstance(data, dict) else None) or self.title
-            self.id = slug(self.title)
+            self.id = (data.get('script_id') if isinstance(data, dict) else None) or slug(self.title)
+            if self.id == 'script':
+                self.id += '-' + hashlib.sha256(self.title.encode('utf-8')).hexdigest()[:8]
             prepared = []
             for n, r in enumerate(rows, 1):
                 ja, en, zh = clean(r.get('ja', '')), clean(r.get('en', '')), clean(r.get('zh', ''))
@@ -118,6 +183,7 @@ class Script:
     def public(self, r, notes):
         row = {k: v for k, v in r.items() if not k.startswith('_')}
         row['annotated'] = r['key'] in notes
+        row['source_id'] = self.id + '::' + r['key']
         return row
 
     def search(self, q='', kinds=None, need='', path='', offset=0, limit=100, annotated=False):
@@ -175,12 +241,13 @@ class Script:
 
     def matcher_rows(self):
         self.load()
-        return [{'ja': r['ja'], 'id': r['key'], 'en': r['en'], 'zh': r['zh']}
+        return [{'ja': r['ja'], 'id': self.id + '::' + r['key'], 'en': r['en'], 'zh': r['zh']}
                 for r in self.rows if r['kind'] in ('dialogue', 'mail') and r['ja']]
 
 
 class Library:
-    def __init__(self):
+    def __init__(self, import_dir=None):
+        self.import_dir = Path(import_dir) if import_dir is not None else ROOT / 'data' / 'reading' / 'scripts'
         self.lock = threading.Lock()
         self.scripts = {}
 
@@ -188,16 +255,40 @@ class Library:
         with self.lock:
             known = {s.folder.resolve(): s for s in self.scripts.values()}
             scripts = {}
-            for folder in folders():
+            imported = [p for p in sorted(self.import_dir.iterdir()) if (p / 'script.json').is_file() and not p.name.startswith('.import-')] if self.import_dir.is_dir() else []
+            for folder in dict.fromkeys(folders() + imported):
                 script = known.get(folder.resolve()) or Script(folder)
                 try:
                     script.load()
-                except (OSError, ValueError, KeyError) as error:
+                except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
                     print('Script skipped:', folder, error)
                     continue
+                if script.id in scripts and scripts[script.id].folder.resolve() != script.folder.resolve():
+                    script.id += '-' + hashlib.sha256(str(script.folder.resolve()).encode('utf-8')).hexdigest()[:8]
                 scripts[script.id] = script
             self.scripts = scripts
             return list(scripts.values())
+
+    def import_script(self, data):
+        data = validate_import(data)
+        self.refresh()
+        with self.lock:
+            destination = self.import_dir / data['script_id']
+            if data['script_id'] in self.scripts or destination.exists():
+                raise ValueError('This script_id is already loaded. Use a different script_id for another version; existing scripts were not changed.')
+            self.import_dir.mkdir(parents=True, exist_ok=True)
+            staging = Path(tempfile.mkdtemp(prefix='.import-', dir=self.import_dir))
+            try:
+                (staging / 'script.json').write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
+                script = Script(staging).load()
+                staging.rename(destination)
+                script.folder = destination
+                script.path = destination / 'script.json'
+                self.scripts[script.id] = script
+                return script.info()
+            finally:
+                if staging.exists() and staging.parent.resolve() == self.import_dir.resolve() and staging.name.startswith('.import-'):
+                    shutil.rmtree(staging)
 
     def get(self, script_id):
         if script_id not in self.scripts:
@@ -214,6 +305,11 @@ class Library:
         return None
 
     def locate(self, key):
+        if '::' in key:
+            identity, row_key = key.split('::', 1)
+            script = self.scripts.get(identity)
+            n = script.by_key.get(row_key) if script else None
+            return {'script': identity, 'n': n} if n else None
         for script in self.scripts.values():
             n = script.by_key.get(key)
             if n:

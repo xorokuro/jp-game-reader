@@ -39,6 +39,14 @@ A normal browser opens at http://127.0.0.1:18745. The supplied runtime is Window
 The personal bundle contains 17 dictionary collections and their supplied media.
 Keep the complete folder together; dictionary paths remain valid after moving it.
 
+## Visual-novel scripts / 台本
+
+Open **台本 → Load script** to import UTF-8 JSON from any visual novel, then
+use the title selector to switch scripts. Each title keeps its own reading
+position. The tab includes a downloadable example; see the complete
+[script format and import guide](SCRIPT-FORMAT.md) for required fields,
+translations, chapters, limits, local storage and OCR matching.
+
 ## Translation engines
 
 Open **Translation engine · 翻譯引擎**, choose an engine and model/package, then

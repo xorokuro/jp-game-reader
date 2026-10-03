@@ -20,16 +20,25 @@
  readTab.innerHTML='<span lang="ja">読む</span><small>Reading</small>';scriptTab.innerHTML='<span lang="ja">台本</span><small>Script</small>';
  for(const [b,v] of [[readTab,'read'],[scriptTab,'script']]){b.type='button';b.className='view-tab';b.dataset.view=v;b.setAttribute('role','tab');b.onclick=()=>setView(v);}
  tabs.append(readTab,scriptTab);title.replaceWith(tabs);
- scriptTab.hidden=true;
+ scriptTab.hidden=false;
 
  // ------------------------------------------------------------- script view skeleton
  const view=E('div');view.id='script-view';view.hidden=true;
  view.innerHTML=`
   <div class="script-bar">
    <label class="script-search"><span class="sr-only">搜尋台本</span><input id="script-q" type="search" lang="ja" autocomplete="off" spellcheck="false" placeholder="搜尋台本 · JA / EN / 繁中 …  (Ctrl+K)"></label>
-   <select id="script-pick" aria-label="Script" hidden></select>
+   <select id="script-pick" aria-label="Script"></select>
+   <button id="script-import" type="button">載入台本 · Load script</button>
+   <input id="script-file" type="file" accept=".json,application/json" hidden>
    <button id="script-filter-toggle" type="button" class="icon-button" title="篩選與設定 · Filters" aria-expanded="false"></button>
   </div>
+  <details class="script-format"><summary>台本格式與範例 · Script format</summary>
+   <p>載入任何遊戲的 UTF-8 JSON 台本。必要欄位：game（名稱）、rows（依閱讀順序排列的台詞）；每句至少提供 ja、en 或 zh 其中一種。其他語言、說話者與章節可省略。</p>
+   <p>上限 64 MiB / 200,000 句。每部作品使用不同 script_id；重複 ID 不會覆蓋原稿。</p>
+   <button id="script-template" type="button">下載範例 JSON</button>
+   <a href="https://github.com/xorokuro/jp-game-reader/blob/main/SCRIPT-FORMAT.md" target="_blank" rel="noopener noreferrer">完整格式說明 · Format guide</a>
+  </details>
+  <div id="script-import-status" class="muted" role="status"></div>
   <div id="script-filters" class="script-filters" hidden>
    <div class="chip-row" id="script-kinds" role="group" aria-label="Kinds"></div>
    <div class="chip-row">
@@ -52,7 +61,23 @@
  $s('script-filter-toggle').innerHTML=icon('list');
 
  let scripts=[],script=store.get('jp-reader-script-id',''),kinds=new Set(store.get('jp-reader-script-kinds',['dialogue','mail','tip','ui','extra']));
- let total=0,start=0,end=0,loading=false,token=0,activeN=store.get('jp-reader-script-pos',0);
+ const positions=store.get('jp-reader-script-positions',{}),viewOffsets=store.get('jp-reader-script-offsets',{});
+ let total=0,start=0,end=0,loading=false,token=0,activeN=positions[script]||store.get('jp-reader-script-pos',0);
+ function rememberPosition(){
+  if(!script)return;
+  const top=list.getBoundingClientRect().top;
+  const first=[...list.querySelectorAll('.script-line')].find(el=>el.getBoundingClientRect().bottom>top+8);
+  if(first){activeN=Number(first.dataset.n);viewOffsets[script]={n:activeN,offset:first.getBoundingClientRect().top-top};store.set('jp-reader-script-offsets',viewOffsets);}
+  positions[script]=activeN;store.set('jp-reader-script-positions',positions);
+ }
+ function switchScript(id){
+  rememberPosition();script=id;pick.value=id;store.set('jp-reader-script-id',script);
+  activeN=positions[script]||1;end=0;
+  q.value='';$s('script-path').value='';$s('script-need').value='';$s('script-annotated').checked=false;
+  kinds=new Set(Object.keys(KIND));drawKinds();
+  const info=scripts.find(s=>s.id===script);q.placeholder=info?'搜尋《'+info.title+'》· JA / EN / 繁中 … (Ctrl+K)':'搜尋台本';
+  reload(activeN,true);
+ }
  $s('script-blur').checked=store.get('jp-reader-script-blur',false);list.classList.toggle('blur-tr',$s('script-blur').checked);
 
  function setView(v){
@@ -60,7 +85,7 @@
   panel.dataset.view=script?'script':'read';view.hidden=!script;
   readTab.setAttribute('aria-selected',String(!script));scriptTab.setAttribute('aria-selected',String(script));
   store.set('jp-reader-view',script?'script':'read');
-  if(script&&!end&&scripts.length)reload(activeN||1);
+  if(script&&!end)reload(activeN||1,true);
   window.dispatchEvent(new Event('reader-layout'));
  }
 
@@ -69,18 +94,19 @@
   return new URLSearchParams({script,q:q.value.trim().replace(/^#\d+$/,''),kinds:[...kinds].join(','),need:$s('script-need').value,path:$s('script-path').value.trim(),annotated:$s('script-annotated').checked?'1':'',...extra});
  }
  async function fetchRows(offset,limit=PAGE){return api('script/search?'+params({offset,limit}));}
- async function reload(aroundN){
+ async function reload(aroundN,restore=false){
+  if(!script){list.replaceChildren(emptyNote());count.textContent='尚未載入台本 · Load a script to start';return;}
   const my=++token;loading=true;list.classList.add('loading');
   try{
    let offset=0;
-   if(aroundN){offset=(await api('script/position?'+params({n:aroundN}))).offset;offset=Math.max(0,offset-10);}
+   if(aroundN){offset=(await api('script/position?'+params({n:aroundN}))).offset;if(my!==token)return;offset=Math.max(0,offset-10);}
    const data=await fetchRows(offset);if(my!==token)return;
    total=data.total;start=offset;end=offset+data.rows.length;
    list.replaceChildren(topSentinel,...data.rows.map(card),bottomSentinel);
    if(!data.rows.length)list.append(emptyNote());
    status();
    const target=aroundN&&list.querySelector(`[data-n="${aroundN}"]`);
-   if(target){target.scrollIntoView({block:'center'});mark(target);}else list.scrollTop=0;
+   if(target){const saved=restore&&viewOffsets[script];const offset=saved&&saved.n===aroundN?saved.offset:list.clientHeight/2-target.clientHeight/2;list.scrollTop+=target.getBoundingClientRect().top-list.getBoundingClientRect().top-offset;mark(target);}else list.scrollTop=0;
   }catch(e){count.textContent=e.message;}
   finally{if(my===token){loading=false;list.classList.remove('loading');}}
  }
@@ -96,7 +122,7 @@
    else{const before=list.scrollHeight;topSentinel.after(...cards);start=offset;list.scrollTop+=list.scrollHeight-before;}
    status();
   }catch(e){count.textContent=e.message;}
-  finally{loading=false;}
+  finally{if(my===token)loading=false;}
  }
  const topSentinel=E('div'),bottomSentinel=E('div');topSentinel.className=bottomSentinel.className='script-sentinel';
  const observer=new IntersectionObserver(entries=>{for(const e of entries)if(e.isIntersecting)more(e.target===bottomSentinel?1:-1);},{root:list,rootMargin:'600px 0px'});
@@ -105,7 +131,7 @@
   const info=scripts.find(s=>s.id===script);
   count.innerHTML=total?`<b>${(start+1).toLocaleString()}–${end.toLocaleString()}</b> / ${total.toLocaleString()} 句${info&&total!==info.rows?` <small>（全 ${info.rows.toLocaleString()}）</small>`:''} · 捲動載入更多`:'沒有符合的台詞';
  }
- function emptyNote(){const p=E('div');p.className='script-empty';p.innerHTML='<b>找不到符合的台詞</b><span>換個關鍵字，或在篩選中放寬條件。</span>';return p;}
+ function emptyNote(){const p=E('div');p.className='script-empty';p.innerHTML=script?'<b>找不到符合的台詞</b><span>換個關鍵字，或在篩選中放寬條件。</span>':'<b>載入你的台本 · Bring your own script</b><span>按「載入台本」選取 JSON 檔案，或先下載範例。可載入多部作品並隨時切換。</span>';return p;}
 
  // ------------------------------------------------------------- line cards
  function highlighted(text,tips){
@@ -161,7 +187,7 @@
  }
  function mark(el){
   list.querySelectorAll('.script-line.active').forEach(x=>x.classList.remove('active'));
-  el.classList.add('active');activeN=Number(el.dataset.n);store.set('jp-reader-script-pos',activeN);
+  el.classList.add('active');activeN=Number(el.dataset.n);store.set('jp-reader-script-pos',activeN);positions[script]=activeN;store.set('jp-reader-script-positions',positions);
  }
  async function toggleNote(el,r,button){
   let box=el.querySelector('.sl-note');
@@ -187,7 +213,7 @@
  function openInReader(r){
   if(dirty())return msg('請先儲存閱讀卡的編輯內容。');
   following=false;navSeq=null;
-  showCurrent({id:-Date.now(),kind:'script',temporary:true,localDraft:true,japanese:r.ja,english:r.en,traditional_chinese:r.zh,note:'',source_id:r.key});
+  showCurrent({id:-Date.now(),kind:'script',temporary:true,localDraft:true,japanese:r.ja,english:r.en,traditional_chinese:r.zh,note:'',source_id:r.source_id||script+'::'+r.key});
   rememberPin();setView('read');window.scrollTo({top:0});
   $('paste-status').textContent='台本 #'+r.n+' · 選取單字即可查詢；按「儲存」可加入日誌（連同官方譯文）。';
   $('latest').focus({preventScroll:true});
@@ -197,7 +223,7 @@
   kinds=new Set(['dialogue','mail','tip','ui','extra']);drawKinds();store.set('jp-reader-script-kinds',[...kinds]);
   await reload(n);
  }
- window.readerScript={open:async(key)=>{const at=await api('script/locate?'+new URLSearchParams({key})).catch(()=>null);if(!at)return false;script=at.script;pick.value=script;setView('script');await context(at.n);return true;}};
+ window.readerScript={open:async(key)=>{const at=await api('script/locate?'+new URLSearchParams({key})).catch(()=>null);if(!at)return false;rememberPosition();script=at.script;pick.value=script;store.set('jp-reader-script-id',script);drawKinds();setView('script');await context(at.n);return true;}};
 
  // ------------------------------------------------------------- filters & controls
  function drawKinds(){
@@ -220,7 +246,7 @@
  $s('script-filter-toggle').onclick=()=>{const f=$s('script-filters');f.hidden=!f.hidden;$s('script-filter-toggle').setAttribute('aria-expanded',String(!f.hidden));};
  const jump=()=>{const n=Number($s('script-jump').value);if(n>0)reload(n);};
  $s('script-jump-go').onclick=jump;$s('script-jump').addEventListener('keydown',e=>{if(e.key==='Enter')jump();});
- pick.onchange=()=>{script=pick.value;store.set('jp-reader-script-id',script);activeN=0;drawKinds();reload();};
+ pick.onchange=()=>switchScript(pick.value);
  $s('script-match').onchange=async()=>{try{await api('script/match',{mode:$s('script-match').value});$s('script-match-status').textContent='套用中…';setTimeout(loadList,2500);}catch(e){$s('script-match-status').textContent=e.message;}};
  // Ctrl+K jumps to the script search, like the standalone viewer.
  document.addEventListener('keydown',e=>{
@@ -236,22 +262,50 @@
   back.innerHTML=icon('book')+'<span>在台本中查看前後文</span>';
  });
 
- async function loadList(){
+ async function loadList(preferred){
   try{
    const data=await api('script/list');scripts=data.scripts||[];
-   scriptTab.hidden=!scripts.length;
-   pick.replaceChildren(...scripts.map(s=>{const o=E('option',s.title);o.value=s.id;return o;}));pick.hidden=scripts.length<2;
+   scriptTab.hidden=false;
+   pick.replaceChildren(...scripts.map(s=>{const o=E('option',s.title);o.value=s.id;return o;}));pick.hidden=false;pick.disabled=!scripts.length;
+   if(!scripts.length){const o=E('option','尚未載入台本');o.value='';pick.append(o);}
    const match=$s('script-match');for(const o of [...match.options].slice(2))o.remove();
    for(const s of scripts){const o=E('option','《'+s.title+'》');o.value=s.id;match.append(o);}
    match.value=data.match?.mode||'auto';
    $s('script-match-status').textContent=data.match?.status||'';
+   if(preferred&&scripts.some(s=>s.id===preferred))script=preferred;
    if(!scripts.some(s=>s.id===script))script=scripts[0]?.id||'';
+   store.set('jp-reader-script-id',script);activeN=positions[script]||1;
    pick.value=script;drawKinds();
    const info=scripts.find(s=>s.id===script);
    q.placeholder=info?`搜尋《${info.title}》· JA / EN / 繁中 …  (Ctrl+K)`:q.placeholder;
    if(store.get('jp-reader-view','read')==='script'&&scripts.length&&panel.dataset.view!=='script')setView('script');
-  }catch{scriptTab.hidden=true;}
+   if(!scripts.length)reload();
+  }catch(e){$s('script-import-status').textContent='無法讀取台本清單：'+e.message;}
  }
+ const importButton=$s('script-import'),fileInput=$s('script-file'),importStatus=$s('script-import-status');
+ importButton.onclick=()=>fileInput.click();
+ fileInput.onchange=async()=>{
+  const file=fileInput.files[0];if(!file)return;
+  rememberPosition();
+  importButton.disabled=true;importStatus.textContent='正在檢查與載入台本…';
+  try{
+   if(file.size>64*1024*1024)throw Error('檔案超過 64 MiB，請分成不同章節的台本。');
+   let data;try{data=JSON.parse((await file.text()).replace(/^\uFEFF/,''));}catch{throw Error('JSON 格式無效。請使用 UTF-8 JSON；可先下載範例。');}
+   const result=await api('script/import',data);
+   await loadList(result.script.id);
+   q.value='';$s('script-path').value='';$s('script-need').value='';$s('script-annotated').checked=false;
+   kinds=new Set(Object.keys(KIND));drawKinds();await reload(1);
+   importStatus.textContent='已載入《'+result.script.title+'》 · '+result.script.rows.toLocaleString()+' 句；已儲存在本機，可隨時切換。';
+  }catch(e){importStatus.textContent=e.message;}
+  finally{fileInput.value='';importButton.disabled=false;}
+ };
+ $s('script-template').onclick=async()=>{
+  try{
+   const data=await api('script/template'),url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+   const a=E('a');a.href=url;a.download='script-template.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }catch(e){importStatus.textContent=e.message;}
+ };
+ addEventListener('pagehide',rememberPosition);
  panel.dataset.view='read';readTab.setAttribute('aria-selected','true');
  loadList();
 })();
