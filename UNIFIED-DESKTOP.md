@@ -135,5 +135,11 @@ an OBS projector; native game rendering modes require testing with the actual ga
 - ✕, Esc or a click anywhere outside tucks it away; dragging to select more text does not count as a
   click. Drag the drawer's left edge to change its width (double-click to reset). The layout per view
   and the width are kept with the portable preferences (`jp-reader-dict-layout`, `jp-reader-drawer-w`).
+- **自動收起 · Auto-hide** (on by default): the drawer also tucks itself away a moment after the mouse
+  leaves it, or after the mouse moves away from the word you just selected. While the mouse rests where
+  you selected, sits on the drawer or the handle, or heads towards the drawer, it stays; typing in its
+  search box, an open ? popover, resizing or a held mouse button also keep it. On/off and the wait
+  (0.3–5 s, default 1.2 s) are in the dictionary's **?** popover and in Theme › More
+  (`jp-reader-drawer-autohide`). Clicking the handle right after a click outside keeps it open.
 - `reader-lookup` events carry `{word, automatic, hits}`; `automatic` is `'selection'` for the page and
   `'entry-selection'` inside an entry. `window.readerDrawer` exposes `mode`, `open`, `setOpen()` and `setMode()`.

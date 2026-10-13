@@ -346,16 +346,28 @@
 // for each view (読む / 台本 / 文法), between the dictionary beside the text and a drawer on the right.
 // In drawer mode the dictionary waits as a small handle on the right edge. It slides in when a word you
 // select has results (or when you click the handle, search, paste or follow a link), and tucks away
-// again with ✕, Esc or a click anywhere outside it. Drag its left edge to change the width.
+// again with ✕, Esc, a click anywhere outside it, or by itself shortly after the mouse leaves it
+// (自動收起; on/off and the wait are in the dictionary's ? popover). Drag its left edge to change the width.
 (() => {
  const workspace=$('reader-workspace'),dictionary=$('dictionary-panel');
  const reading=workspace?.querySelector('section.current'),head=reading?.querySelector('.card-head');
  if(!workspace||!dictionary||!reading||!head)return;
- const LAYOUT='jp-reader-dict-layout',WIDTH='jp-reader-drawer-w';
+ const LAYOUT='jp-reader-dict-layout',WIDTH='jp-reader-drawer-w',AUTOHIDE='jp-reader-drawer-autohide';
  const load=(key,fallback)=>{try{const v=JSON.parse(localStorage.getItem(key)||'null');return v??fallback;}catch{return fallback;}};
  const store=(key,value)=>{try{localStorage.setItem(key,JSON.stringify(value));}catch{}};
  let layouts=load(LAYOUT,{});if(!layouts||typeof layouts!=='object'||Array.isArray(layouts))layouts={};
  let width=Number(load(WIDTH,0))||0,open=false,pending=0;
+ // 自動收起: once the pointer leaves the drawer, or moves away from the word you just selected, the
+ // drawer tucks itself away after a short wait. On by default; the wait can be 0.3–5 s.
+ const autoHide={on:true,ms:1200};
+ function readAutoHide(){
+  const v=load(AUTOHIDE,null);
+  if(!v||typeof v!=='object')return;
+  if(typeof v.on==='boolean')autoHide.on=v.on;
+  if(Number.isFinite(v.ms))autoHide.ms=Math.max(300,Math.min(5000,Math.round(v.ms/100)*100));
+ }
+ readAutoHide();
+ let hideTimer=0,rest=null,pressed=false,lastPointer=null,over=false,closing=false,keepOpen=false;
  const view=()=>reading.dataset.view||'read';
  const drawerMode=()=>workspace.classList.contains('dict-drawer-mode');
  if(window.readerIcons){
@@ -374,7 +386,7 @@
   const drawer=drawerMode();
   toggle.innerHTML=icon(drawer?'layoutSide':'layoutDrawer')+'<span>'+(drawer?'並排':'全寬')+'</span>';
   toggle.title=drawer?'辭典改回放在旁邊 · Show the dictionary beside the text'
-   :'全寬閱讀：辭典收到右側，選到查得到的字才滑出（每個分頁各自記住）· Full width: the dictionary slides in from the right';
+   :'全寬閱讀：辭典收到右側，選到查得到的字才滑出，滑鼠移開就自動收起（每個分頁各自記住）· Full width: the dictionary slides in from the right and hides when the mouse leaves';
   toggle.setAttribute('aria-pressed',String(drawer));
  }
 
@@ -389,7 +401,8 @@
   const next=!!on&&drawerMode();
   if(next===open)return;
   open=next;
-  clearTimeout(pending);            // a click outside that was about to close it no longer counts
+  clearTimeout(pending);closing=false;  // a click outside that was about to close it no longer counts
+  if(open){over=dictionary.matches(':hover')||handle.matches(':hover');rearm();}else{over=false;stopHide();rest=null;}
   if(open)dictionary.hidden=false;
   dictionary.classList.toggle('drawer-open',open);workspace.classList.toggle('drawer-is-open',open);
   handle.setAttribute('aria-expanded',String(open));
@@ -416,7 +429,8 @@
   layouts={...layouts,[view()]:drawerMode()?'side':'drawer'};store(LAYOUT,layouts);
   applyView();
  };
- handle.onclick=()=>setOpen(!open);
+ // A click outside starts closing it (0.33 s); clicking the handle in that moment means "keep it open".
+ handle.onclick=()=>{if(keepOpen){keepOpen=false;setOpen(true);return;}setOpen(!open);};
  new MutationObserver(()=>{setOpen(false);applyView();}).observe(reading,{attributes:true,attributeFilter:['data-view']});
 
  // ✕ tucks the drawer away instead of removing the dictionary.
@@ -434,9 +448,9 @@
   if(Number.isFinite(hits)){count.hidden=false;count.textContent=String(hits);handle.classList.toggle('no-hits',hits===0);}
   if(!drawerMode())return;
   if(detail.automatic==='selection'){
-   if(hits>0)setOpen(true);
+   if(hits>0){setOpen(true);rearm();}
    else{setOpen(false);handle.classList.remove('nudge');void handle.offsetWidth;handle.classList.add('nudge');}
-  }else if(!detail.automatic)setOpen(true);
+  }else if(!detail.automatic){setOpen(true);rearm();}
  });
  handle.addEventListener('animationend',()=>handle.classList.remove('nudge'));
 
@@ -444,27 +458,96 @@
  let press=null;
  const overlays='#theme-drawer,#theme-scrim,.sheet,.toast,[role="dialog"]';
  function watch(doc){
+  // 自動收起 follows the pointer in this document too (lesson pages are documents of their own).
+  doc.addEventListener('pointermove',onPointerMove,true);
+  doc.addEventListener('pointerdown',event=>{if(event.button===0&&event.pointerType!=='touch')pressed=true;},true);
+  const release=()=>{if(!pressed)return;pressed=false;if(open&&!inDrawer())rearm();};
+  doc.addEventListener('pointerup',release,true);doc.addEventListener('pointercancel',release,true);
   doc.addEventListener('pointerdown',event=>{
-   press=null;
+   press=null;keepOpen=false;
    if(!open||event.button!==0)return;
    const target=event.target;
-   if(doc===document&&(dictionary.contains(target)||handle.contains(target)||target.closest?.(overlays))){clearTimeout(pending);return;}
+   if(doc===document&&(dictionary.contains(target)||handle.contains(target)||target.closest?.(overlays))){
+    if(closing&&handle.contains(target))keepOpen=true;
+    clearTimeout(pending);closing=false;return;
+   }
    press={doc,x:event.clientX,y:event.clientY};
   },true);
   doc.addEventListener('pointerup',event=>{
    const start=press;press=null;
    if(!start||start.doc!==doc||Math.hypot(event.clientX-start.x,event.clientY-start.y)>5)return;
-   clearTimeout(pending);
+   clearTimeout(pending);closing=true;
    pending=setTimeout(()=>{
+    closing=false;
     const selection=doc.getSelection?.();
     if(selection&&!selection.isCollapsed&&selection.toString().trim())return; // a double-click picked a word
     setOpen(false);
    },330);
   },true);
-  doc.addEventListener('dblclick',()=>clearTimeout(pending),true);
+  doc.addEventListener('dblclick',()=>{clearTimeout(pending);closing=false;},true);
   // Capture phase: decide before the theme drawer or the shortcut sheet close themselves on Esc.
   doc.addEventListener('keydown',onKey,true);
  }
+ // 自動收起. The countdown starts when the pointer leaves the drawer (or the handle), or, after a word
+ // was just shown, once the pointer moves away from where it was. Coming back cancels it; heading
+ // towards the drawer, typing in its search box, an open ? popover, resizing or a held mouse button
+ // keep it open. Enter/leave events only hint where the pointer is (a drawer still sliding in can
+ // "leave" a pointer that stays on it, and the entry is a sandboxed frame that reports nothing), so
+ // before hiding, the last position the page saw is checked against what is actually there.
+ const inDrawer=()=>over;
+ function setOver(on){
+  if(on===over)return;
+  over=on;
+  if(on){stopHide();rest=null;}else startHide();
+ }
+ function holdOpen(){
+  if(pressed||workspace.classList.contains('drawer-resizing')||dictionary.querySelector('.dict-pop[open]'))return true;
+  const active=document.activeElement;
+  return !!(active&&dictionary.contains(active)&&active.matches('textarea,select,input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"])'));
+ }
+ function stopHide(){clearTimeout(hideTimer);hideTimer=0;}
+ function pointerOverDrawer(){
+  if(!lastPointer)return over;
+  let {x,y}=lastPointer;
+  if(lastPointer.doc!==document){
+   const frame=lastPointer.doc.defaultView?.frameElement;if(!frame)return over;
+   const r=frame.getBoundingClientRect();x+=r.left+frame.clientLeft;y+=r.top+frame.clientTop;
+  }
+  const el=document.elementFromPoint(x,y);
+  return !!el&&(dictionary.contains(el)||handle.contains(el));
+ }
+ function startHide(){
+  if(hideTimer||!open||!autoHide.on||!drawerMode())return;
+  hideTimer=setTimeout(()=>{
+   hideTimer=0;
+   if(!open||!autoHide.on)return;
+   if(pointerOverDrawer()){over=true;return;}
+   if(!holdOpen())setOpen(false);
+  },autoHide.ms);
+ }
+ function rearm(){stopHide();rest=lastPointer&&!over?{...lastPointer}:null;}
+ function onPointerMove(event){
+  if(event.pointerType==='touch')return;
+  const doc=event.target?.ownerDocument||document,previous=lastPointer;
+  lastPointer={doc,x:event.clientX,y:event.clientY};
+  if(doc===document&&(dictionary.contains(event.target)||handle.contains(event.target))){setOver(true);return;}
+  if(over){setOver(false);return;}          // left without a leave event (e.g. out of the entry frame)
+  if(!open||!autoHide.on||!drawerMode())return;
+  if(hideTimer){
+   // Moving right, towards the drawer: start the wait again.
+   if(previous&&previous.doc===doc&&event.clientX-previous.x>1){stopHide();startHide();}
+   return;
+  }
+  if(rest){if(rest.doc===doc&&Math.hypot(event.clientX-rest.x,event.clientY-rest.y)<24)return;rest=null;}
+  startHide();
+ }
+ for(const el of [dictionary,handle]){
+  el.addEventListener('pointerenter',event=>{if(event.pointerType!=='touch')setOver(true);});
+  el.addEventListener('pointerleave',event=>{if(event.pointerType!=='touch')setOver(false);});
+ }
+ dictionary.addEventListener('focusin',stopHide);
+ addEventListener('blur',()=>{pressed=false;});   // a button released outside the window
+
  function onKey(event){
   if(event.key!=='Escape'||!open||event.defaultPrevented)return;
   if(document.querySelector('#theme-drawer.open,#theme-drawer[aria-hidden="false"],.sheet:not([hidden])'))return;
@@ -502,12 +585,38 @@
   grip.addEventListener('pointermove',move);grip.addEventListener('pointerup',up);grip.addEventListener('pointercancel',up);
  });
  grip.addEventListener('dblclick',()=>{width=0;paintWidth();try{localStorage.removeItem(WIDTH);}catch{}});
+ // 自動收起 setting: in the dictionary's ? popover and in Theme › More, kept in sync.
+ const autoControls=[];
+ function paintAutoHide(){
+  for(const c of autoControls){
+   c.box.checked=autoHide.on;c.range.value=String(autoHide.ms);c.range.disabled=!autoHide.on;
+   c.out.textContent=(autoHide.ms/1000).toFixed(1)+' 秒';
+  }
+ }
+ function saveAutoHide(){store(AUTOHIDE,{on:autoHide.on,ms:autoHide.ms});paintAutoHide();if(!autoHide.on)stopHide();}
+ function makeAutoHideSetting(host){
+  if(!host)return;
+  const wrap=E('div');wrap.className='drawer-autohide-setting';
+  wrap.innerHTML='<label class="dict-autohide-setting"><input type="checkbox"> 滑鼠移開就自動收起辭典（全寬模式）· Hide the drawer when the mouse leaves it</label>'
+   +'<label class="drawer-delay"><span>等待 · Wait</span><input type="range" min="300" max="5000" step="100"><output></output></label>';
+  const box=wrap.querySelector('input[type="checkbox"]'),range=wrap.querySelector('input[type="range"]'),out=wrap.querySelector('output');
+  range.setAttribute('aria-label','自動收起前等待的秒數 · Seconds before the drawer hides');
+  box.onchange=()=>{autoHide.on=box.checked;saveAutoHide();};
+  range.oninput=()=>{autoHide.ms=Number(range.value);paintAutoHide();};
+  range.onchange=saveAutoHide;
+  host.append(wrap);autoControls.push({box,range,out});
+ }
+ makeAutoHideSetting(dictionary.querySelector('#dict-help .dict-pop-body'));
+ makeAutoHideSetting($('theme-settings'));
+ paintAutoHide();
+
  // Another window of the reader changed the layout: follow it.
  addEventListener('storage',event=>{
   if(event.key===LAYOUT){layouts=load(LAYOUT,{})||{};applyView();}
   if(event.key===WIDTH){width=Number(load(WIDTH,0))||0;paintWidth();}
+  if(event.key===AUTOHIDE){readAutoHide();paintAutoHide();}
  });
  paintWidth();applyView();
  handle.setAttribute('aria-expanded','false');handle.title='打開辭典 · Open the dictionary';handle.setAttribute('aria-label',handle.title);
- window.readerDrawer={get mode(){return drawerMode()?'drawer':'side';},get open(){return open;},setOpen,setMode:mode=>{layouts={...layouts,[view()]:mode==='drawer'?'drawer':'side'};store(LAYOUT,layouts);applyView();}};
+ window.readerDrawer={get mode(){return drawerMode()?'drawer':'side';},get open(){return open;},get autoHide(){return {...autoHide};},setOpen,setMode:mode=>{layouts={...layouts,[view()]:mode==='drawer'?'drawer':'side'};store(LAYOUT,layouts);applyView();}};
 })();
