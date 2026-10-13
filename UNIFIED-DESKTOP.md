@@ -124,6 +124,11 @@ an OBS projector; native game rendering modes require testing with the actual ga
 - The 總目錄's 已學 checkmarks are stored per browser address, so ticks made while opening the
   file directly are not shown here; move them once with 匯出進度 → 匯入進度.
 - A lesson opened in its own browser tab shows **在閱讀器中開啟**, which reopens it in the 文法 tab.
+- Lesson pages that show each lesson in a frame of their own (the single-file JLPT 文法 book:
+  `index.html` + `book.js`) work too: the reader follows same-origin frames inside a lesson page,
+  so selecting a word there looks it up and the full-width drawer behaves the same. Pointing the tab
+  at the folder with the 總目錄 page and `lessons/` (for example the repository's `content` folder)
+  is still the better fit: 目錄, back / forward and 跟隨主題 then apply to the lessons themselves.
 
 ## 全寬 · Full-width reading with a slide-out dictionary
 

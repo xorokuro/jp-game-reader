@@ -331,9 +331,28 @@
         if(word&&word.length<120)input.value=word;
       };
       doc.addEventListener('selectionchange',fill);
+      // Some lesson pages show each lesson in a frame of their own (the single-file JLPT 文法 book
+      // does, through srcdoc): follow same-origin frames inside the page, now and after each reload.
+      followFrames(doc);
     },
     search(word){input.value=String(word||'').trim();if(input.value)searchDictionaries();}
   };
+  function followFrames(doc){
+    const hook=inner=>{
+      if(inner.__readerFollow)return;inner.__readerFollow=true;
+      const attachInner=()=>{let child=null;try{child=inner.contentDocument;}catch{}if(child?.documentElement)window.readerDictionary.attach(child);};
+      inner.addEventListener('load',attachInner);attachInner();
+    };
+    try{
+      doc.querySelectorAll('iframe,frame').forEach(hook);
+      new MutationObserver(records=>{
+        for(const record of records)for(const node of record.addedNodes){
+          if(node.nodeType!==1)continue;
+          if(node.matches('iframe,frame'))hook(node);else node.querySelectorAll('iframe,frame').forEach(hook);
+        }
+      }).observe(doc.documentElement,{childList:true,subtree:true});
+    }catch{}
+  }
   frame.addEventListener('load',()=>{
     // Entries stay sandboxed; the parent can read selections in local documents.
     let entryDocument;try{entryDocument=frame.contentDocument;}catch{return;}

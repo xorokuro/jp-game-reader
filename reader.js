@@ -508,10 +508,13 @@
  function stopHide(){clearTimeout(hideTimer);hideTimer=0;}
  function pointerOverDrawer(){
   if(!lastPointer)return over;
-  let {x,y}=lastPointer;
-  if(lastPointer.doc!==document){
-   const frame=lastPointer.doc.defaultView?.frameElement;if(!frame)return over;
-   const r=frame.getBoundingClientRect();x+=r.left+frame.clientLeft;y+=r.top+frame.clientTop;
+  // Map the point out of (possibly nested, possibly zoomed) lesson frames into this window.
+  let {x,y,doc}=lastPointer;
+  while(doc!==document){
+   const frame=doc?.defaultView?.frameElement;if(!frame)return over;
+   const r=frame.getBoundingClientRect(),sx=frame.offsetWidth?r.width/frame.offsetWidth:1,sy=frame.offsetHeight?r.height/frame.offsetHeight:1;
+   x=r.left+(frame.clientLeft+x)*sx;y=r.top+(frame.clientTop+y)*sy;
+   doc=frame.ownerDocument;
   }
   const el=document.elementFromPoint(x,y);
   return !!el&&(dictionary.contains(el)||handle.contains(el));
