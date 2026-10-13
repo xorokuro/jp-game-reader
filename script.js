@@ -80,14 +80,30 @@
  }
  $s('script-blur').checked=store.get('jp-reader-script-blur',false);list.classList.toggle('blur-tr',$s('script-blur').checked);
 
+ // Other full-card views (文法 …) register here and get a tab beside 読む / 台本.
+ const extraViews=new Map();
  function setView(v){
-  const script=v==='script'&&!scriptTab.hidden;
-  panel.dataset.view=script?'script':'read';view.hidden=!script;
-  readTab.setAttribute('aria-selected',String(!script));scriptTab.setAttribute('aria-selected',String(script));
-  store.set('jp-reader-view',script?'script':'read');
-  if(script&&!end)reload(activeN||1,true);
+  if(v==='script'?scriptTab.hidden:!extraViews.has(v))v='read';
+  const previous=panel.dataset.view;
+  panel.dataset.view=v;view.hidden=v!=='script';
+  readTab.setAttribute('aria-selected',String(v==='read'));scriptTab.setAttribute('aria-selected',String(v==='script'));
+  for(const [name,extra] of extraViews){extra.el.hidden=v!==name;extra.tab.setAttribute('aria-selected',String(v===name));}
+  store.set('jp-reader-view',v);
+  if(v==='script'&&!end)reload(activeN||1,true);
+  if(previous!==v){extraViews.get(previous)?.onHide?.();extraViews.get(v)?.onShow?.();}
   window.dispatchEvent(new Event('reader-layout'));
  }
+ window.readerViews={
+  add(name,labelHtml,el,hooks={}){
+   const tab=E('button');tab.type='button';tab.className='view-tab';tab.dataset.view=name;tab.setAttribute('role','tab');tab.setAttribute('aria-selected','false');
+   tab.innerHTML=labelHtml;tab.onclick=()=>setView(name);tabs.append(tab);
+   el.hidden=true;view.after(el);extraViews.set(name,{tab,el,...hooks});
+   if(store.get('jp-reader-view','read')===name)setView(name);
+   return tab;
+  },
+  set:setView,
+  get current(){return panel.dataset.view||'read';}
+ };
 
  // ------------------------------------------------------------- data
  function params(extra={}){

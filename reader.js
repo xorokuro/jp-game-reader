@@ -203,7 +203,7 @@
   frame=0;
   document.documentElement.style.setProperty('--topbar-h',Math.round(topbar.getBoundingClientRect().height)+'px');
   const sideBySide=!dictionary.hidden&&getComputedStyle(workspace).gridTemplateColumns.trim().split(/\s+/).length>1;
-  if(!sideBySide||readingPanel.dataset.view==='script'){leftPad.style.height=rightPad.style.height='0px';return;}
+  if(!sideBySide||(readingPanel.dataset.view||'read')!=='read'){leftPad.style.height=rightPad.style.height='0px';return;}
   // While the search row is tucked away, keep the reading text where it is.
   if(dictionary.classList.contains('search-tucked'))return;
   const leftHead=latest.getBoundingClientRect().top-readingPanel.getBoundingClientRect().top-leftPad.offsetHeight;

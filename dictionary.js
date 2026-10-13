@@ -220,6 +220,24 @@
     input.value=text;
     searchDictionaries();
   }
+  // Selected text without furigana: <rt>/<rp> readings are dropped so 有意(ゆうい) looks up 有意.
+  function selectedText(doc){
+    const selection=doc.getSelection?.();
+    if(!selection||selection.isCollapsed||!selection.rangeCount)return '';
+    const plain=selection.toString();
+    try{
+      const range=selection.getRangeAt(0),node=range.commonAncestorContainer,host=node.nodeType===1?node:node.parentElement;
+      if(!host||host.closest('rt,rp'))return plain; // deliberately selecting the reading itself
+      if(!host.closest('ruby')&&!host.querySelector('rt'))return plain;
+      const fragment=range.cloneContents();
+      if(!fragment.querySelector('rt,rp'))return plain;
+      fragment.querySelectorAll('rt,rp').forEach(reading=>reading.remove());
+      // Block boundaries stay line breaks, so a selection across paragraphs still counts as a passage.
+      fragment.querySelectorAll('br,p,div,li,tr,h1,h2,h3,h4,h5,h6,section,article,details,summary,blockquote,dt,dd').forEach(block=>block.after('\n'));
+      return fragment.textContent;
+    }catch{return plain;}
+  }
+  window.readerSelectionText=selectedText;
   function enableSelectionSearch(doc,insideEntry=false){
     let selecting=false,skipLookup=false,pendingLookup;
     const cancelLookup=()=>{clearTimeout(pendingLookup);};
@@ -262,6 +280,14 @@
       if(suppressMenu||rightDrag?.moved){event.preventDefault();suppressMenu=false;}
     });
     doc.addEventListener('copy',cancelLookup);
+    // Copy kanji without their furigana as well (the reading stays on the page).
+    doc.addEventListener('copy',event=>{
+      const selection=doc.getSelection();
+      if(!event.clipboardData||!selection||selection.isCollapsed)return;
+      const plain=selection.toString(),clean=selectedText(doc);
+      if(!clean||clean===plain)return;
+      event.clipboardData.setData('text/plain',clean.replace(/\n+$/,''));event.preventDefault();
+    });
     doc.addEventListener('paste',event=>{cancelLookup();pasteAndSearch(event);});
     doc.addEventListener('keydown',navigateDictionaryWithArrows);
     doc.addEventListener('keydown',navigateDictionaryWithLetters);
@@ -280,18 +306,34 @@
     doc.addEventListener('pointerup',event=>{
       if(!selecting)return;selecting=false;
       if(skipLookup||event.shiftKey)return;
-      const selectedText=doc.getSelection()?.toString().trim();
+      const picked=selectedText(doc).trim();
       pendingLookup=setTimeout(()=>{
         const selection=doc.getSelection();
         if(!selection||selection.isCollapsed)return;
-        const word=selection.toString().trim();
+        const word=selectedText(doc).trim();
         // Leave sentence selections intact so copying never replaces the entry.
-        if(!word||word!==selectedText||Array.from(word).length>10||/[\r\n。！？.!?]/u.test(word))return;
+        if(!word||word!==picked||Array.from(word).length>10||/[\r\n。！？.!?]/u.test(word))return;
         input.value=word;searchDictionaries(true);
       },300);
     });
   }
   enableSelectionSearch(document);
+  // Other local documents shown inside the reader (文法 lessons) get the same lookup behaviour.
+  window.readerDictionary={
+    attach(doc){
+      if(!doc||doc.__readerLookup)return;doc.__readerLookup=true;
+      enableSelectionSearch(doc,true);
+      const fill=()=>{
+        if(document.activeElement===input)return;
+        const active=doc.activeElement;
+        if(active&&(active.matches('input,textarea')||active.isContentEditable))return;
+        const word=selectedText(doc).trim();
+        if(word&&word.length<120)input.value=word;
+      };
+      doc.addEventListener('selectionchange',fill);
+    },
+    search(word){input.value=String(word||'').trim();if(input.value)searchDictionaries();}
+  };
   frame.addEventListener('load',()=>{
     // Entries stay sandboxed; the parent can read selections in local documents.
     let entryDocument;try{entryDocument=frame.contentDocument;}catch{return;}
@@ -323,7 +365,7 @@
       if(active&&(active.matches('input,textarea')||active.isContentEditable))return;
       const selection=entryDocument.getSelection();
       if(!selection||selection.isCollapsed)return;
-      const word=selection.toString().trim();
+      const word=selectedText(entryDocument).trim();
       if(word&&word.length<120)input.value=word;
     };
     entryDocument.addEventListener('selectionchange',useSelection);

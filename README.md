@@ -131,6 +131,13 @@ chunked translation, missing-model and relative-path checks. Run
 `runtime\python.exe verify_bundle.py` in a personal bundle to verify every copied
 dictionary file and sample definitions/media. See [ROADMAP.md](ROADMAP.md).
 
+## 文法 · Grammar lessons
+
+Open the **文法** tab to read your own HTML lesson pages (e.g. a JLPT 文法 folder with its
+總目錄 and `lessons/`) beside the dictionary. Select a word in a lesson to look it up; furigana
+is never included in the selection. Paste the lesson folder path in the tab once (saved to the
+git-ignored `grammar_root.txt`). See [UNIFIED-DESKTOP.md](UNIFIED-DESKTOP.md#文法--your-grammar-lessons).
+
 ## Unified desktop update
 
 The desktop uses the newer Fortune Weave design and controls. See

@@ -1,11 +1,12 @@
 """Persistent local Japanese sentence journal. Standard-library only."""
 import local_dictionary
 import script_library
+import grammar_library
 import argparse,collections,difflib,json,re,socket,sqlite3,subprocess,threading,time,unicodedata,webbrowser
 from contextlib import contextmanager,closing
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
-from urllib.parse import urlparse,parse_qs
+from urllib.parse import urlparse,parse_qs,unquote
 HERE=Path(__file__).resolve().parent
 DATA=HERE/'saved_sentences'
 def visible_text(text):
@@ -451,6 +452,8 @@ def main():
                     return self.send(library.get(query['script'][0]).row(int(query['n'][0])))
                 if p=='/api/script/locate':
                     return self.send(library.locate(query['key'][0]))
+                if p=='/api/grammar/list':
+                    return self.send({'collections':[c.info() for c in grammar_library.collections()],'root_file':str(HERE/grammar_library.ROOT_FILE)})
                 if p=='/api/dictionary/catalog':
                     return self.send({'dictionaries':local_dictionary.catalog(),'yomitan':local_dictionary.catalog_status()})
                 if p=='/api/dictionary/resolve':
@@ -482,7 +485,14 @@ def main():
                         while chunk:=stream.read(65536):self.wfile.write(chunk)
                     return
             except (ValueError,KeyError,sqlite3.Error) as e:return self.send({"error":str(e)},400)
-            if p in ['/','/index.html','/app.js','/translations.js','/style.css','/dictionary.js','/dictionary.css','/dictionary-entry.css','/deepl-web.js','/reader.js','/theme.js','/script.js']:
+            if p.startswith('/grammar/'):
+                # Your own lesson pages (文法 tab); read-only, never outside the configured folders.
+                try:raw,mime=grammar_library.serve(unquote(p))
+                except (LookupError,OSError,ValueError) as e:
+                    if re.search(r'(\.html?|/[^./]*)$',p,re.I):return self.send(grammar_library.missing_page(unquote(p),str(e)),404,'text/html; charset=utf-8')
+                    return self.send({'error':str(e)},404)
+                return self.send(raw,mime=mime)
+            if p in ['/','/index.html','/app.js','/translations.js','/style.css','/dictionary.js','/dictionary.css','/dictionary-entry.css','/deepl-web.js','/reader.js','/theme.js','/script.js','/grammar.js','/grammar-frame.js','/grammar-frame.css']:
                 name='index.html' if p=='/' else p[1:];mime={'html':'text/html','js':'text/javascript','css':'text/css'}[name.rsplit('.',1)[1]]
                 raw=(HERE/name).read_bytes()
                 if name=='dictionary-entry.css':
@@ -569,6 +579,9 @@ def main():
                     imported=library.import_script(body)
                     threading.Thread(target=choose_matcher,daemon=True).start()
                     return self.send({'script':imported})
+                elif self.path=='/api/grammar/root':
+                    added=grammar_library.add_root(body.get('path'))
+                    return self.send({'added':added.info(),'collections':[c.info() for c in grammar_library.collections()]})
                 elif self.path=='/api/script/match':
                     mode=str(body.get('mode','auto'))
                     if mode not in ('auto','off') and mode not in library.scripts:raise ValueError('Unknown script.')

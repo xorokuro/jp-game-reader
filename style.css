@@ -744,3 +744,41 @@ mark{background:color-mix(in srgb,var(--accent-3) 45%,transparent);color:inherit
 /* Reserve action-row space so hover/selection cannot shift a restored reading position. */
 .script-list .script-line .sl-actions{max-height:none;overflow:visible;pointer-events:none;transition:opacity .15s ease}
 .script-list .script-line:is(:hover,.active,:focus-within) .sl-actions{pointer-events:auto}
+
+/* 19. 文法 · Grammar lessons tab ------------------------------------------------ */
+section.current[data-view="grammar"]>:not(.card-head):not(#grammar-view):not(.align-spacer){display:none!important}
+section.current[data-view="grammar"] .card-head>:not(.view-tabs){display:none!important}
+#reader-workspace section.current[data-view="grammar"]{display:flex;flex-direction:column;height:var(--ws-h,calc(100dvh - 104px));min-height:520px}
+#grammar-view{display:flex;flex-direction:column;flex:1;min-height:0;gap:10px;margin-top:6px}
+#grammar-view[hidden]{display:none}
+.grammar-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex-shrink:0}
+.grammar-nav{display:inline-flex;gap:4px}
+.grammar-bar button{padding:6px 11px;font-size:13px}
+.grammar-bar .icon-button{padding:6px;min-width:34px;min-height:34px}
+.grammar-bar .icon-button .ico{width:18px;height:18px}
+#grammar-home{display:inline-flex;align-items:center;gap:6px}
+#grammar-home .ico{width:17px;height:17px}
+#grammar-pick{max-width:200px;padding:6px 10px;font-size:13px}
+.grammar-title{flex:1;min-width:120px;font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grammar-zoom{display:inline-flex;border:1.5px solid var(--line);border-radius:10px;overflow:hidden}
+.grammar-zoom button{padding:5px 9px;font-size:12.5px;background:transparent;border:0;border-radius:0;box-shadow:none;min-height:0}
+.grammar-zoom button:hover:not(:disabled){background:var(--inset-2);transform:none;box-shadow:none}
+.grammar-follow{font-size:12.5px;color:var(--muted);display:inline-flex;align-items:center;gap:5px;white-space:nowrap;cursor:pointer}
+#grammar-frame{flex:1;min-height:0;width:100%;border:1.5px solid var(--line);border-radius:var(--wobble-sm);background:var(--card);display:block}
+#grammar-frame[hidden]{display:none}
+.grammar-setup{flex-shrink:0;padding:14px 16px;background:var(--inset);border:1.5px dashed var(--line);border-radius:var(--wobble-sm);display:flex;flex-direction:column;gap:10px;font-size:13.5px}
+.grammar-setup p{margin:0}
+.grammar-setup-lead{display:flex;flex-direction:column;gap:2px}
+.grammar-setup-lead b{font:700 19px var(--font-hand);color:var(--ink)}
+.grammar-setup code{font:12px var(--font-mono);overflow-wrap:anywhere}
+.grammar-add{display:flex;gap:6px}
+.grammar-add input{flex:1;min-width:0;padding:8px 12px;font-size:14px}
+.grammar-folders{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.grammar-folders:empty{display:none}
+.grammar-folders li{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}
+.grammar-folders code{color:var(--faint)}
+.grammar-folders small{color:var(--muted)}
+/* While a resize grip is dragged, the lesson frame must not swallow the pointer. */
+body.ws-resizing #grammar-frame{pointer-events:none}
+/* Furigana is left out of selections in the reader's own ruby text too. */
+rt,rp{-webkit-user-select:none;user-select:none}

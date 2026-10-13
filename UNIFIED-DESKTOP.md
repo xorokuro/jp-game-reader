@@ -104,3 +104,23 @@ an OBS projector; native game rendering modes require testing with the actual ga
   in the dictionary header (green = common ≤5,000, amber ≤20,000, grey = rarer).
 - New Yomitan dictionaries are ticked once when they first appear (name lists such as
   Nico/Pixiv start unticked). Codes start with `YT_`; see `yomitan_library.py`.
+
+## 文法 · Your grammar lessons
+
+- The **文法** tab beside 読む / 台本 shows your own lesson pages (for example the JLPT 文法
+  folder: 總目錄 + `lessons/`) inside the reading card, next to the dictionary.
+- Selecting up to 10 characters in a lesson looks it up, exactly like the reading text.
+  Furigana (`<rt>`) is left out of the highlight, the lookup and Ctrl+C, so selecting 有意 searches
+  有意, not 有意ゆうい. The same applies to ruby elsewhere in the reader.
+- Tell the reader where the lessons are: paste the folder path in the tab's setup box, or list
+  folders in `grammar_root.txt` next to `journal.py` (one per line, `#` comments; the `lessons`
+  folder itself also works). `JP_READER_GRAMMAR` and folders copied into `grammar/` work too.
+  These paths and copies are git-ignored; lesson files are never modified.
+- The server adds `grammar-frame.css` / `grammar-frame.js` to each page as it is served (not on
+  disk). Pages may only be read from the listed folders, and only web file types are served.
+- Toolbar: back / forward, **目錄** (returns to the index with your last level tab and scroll
+  position), text size, **跟隨主題** (lesson colours follow the palette; untick for the original
+  look), and the folder list. The last page you read is reopened next time.
+- The 總目錄's 已學 checkmarks are stored per browser address, so ticks made while opening the
+  file directly are not shown here; move them once with 匯出進度 → 匯入進度.
+- A lesson opened in its own browser tab shows **在閱讀器中開啟**, which reopens it in the 文法 tab.

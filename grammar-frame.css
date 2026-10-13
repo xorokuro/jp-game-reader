@@ -1,0 +1,29 @@
+/* Added to your lesson pages while the reader serves them (文法 tab). The lesson files are unchanged. */
+
+/* Furigana stays out of text selections: selecting 有意 copies and looks up 有意, not 有意ゆうい. */
+rt,rp{-webkit-user-select:none;user-select:none}
+
+/* 跟隨主題 · Follow the reader's palette. grammar.js sets the colours on <html>. */
+:root[data-reader-theme] body{background:var(--paper)!important;background-image:none!important}
+:root[data-reader-theme] ruby rt,:root[data-reader-theme] .note-l{color:var(--r-rt)!important}
+:root[data-reader-theme] mark{background:var(--r-mark)!important;color:inherit!important}
+:root[data-reader-theme] header.hero{background:var(--paper)!important}
+:root[data-reader-theme] .bar{background:color-mix(in srgb,var(--paper) 94%,transparent)!important;box-shadow:0 2px 10px -6px var(--line)!important}
+:root[data-reader-theme] .searchwrap input[type=search],:root[data-reader-theme] .ck{background:var(--card)!important}
+:root[data-reader-theme] .entry:hover{background:var(--paper-2)!important}
+:root[data-reader-theme] .mean{color:var(--r-mean)!important}
+:root[data-reader-theme] .lesson.revised{color:var(--r-ok)!important;border-color:var(--r-ok)!important;background:transparent!important}
+:root[data-reader-theme] .lesson.revised:hover,:root[data-reader-theme] .lesson:hover{color:var(--r-on-level)!important;background:var(--indigo)!important}
+:root[data-reader-theme] .lesson.revised:hover{background:var(--r-ok)!important}
+:root[data-reader-theme] .totop{box-shadow:none!important}
+/* Dark palettes lighten the level colours, so labels printed on them switch to dark ink. */
+:root[data-reader-theme="dark"] .badge,:root[data-reader-theme="dark"] .lvtag,:root[data-reader-theme="dark"] .rtag,
+:root[data-reader-theme="dark"] .tab.on,:root[data-reader-theme="dark"] .reg,:root[data-reader-theme="dark"] .vs{color:var(--r-on-level)!important}
+:root[data-reader-theme="dark"] .tab.on .cnt{color:color-mix(in srgb,var(--r-on-level) 70%,transparent)!important}
+:root[data-reader-theme="dark"] .ck:checked::after{border-color:var(--r-on-level)!important}
+
+/* A lesson opened in its own browser tab offers the way back into the reader. */
+.reader-open-in{position:fixed;left:14px;bottom:14px;z-index:99;padding:7px 14px;border-radius:99px;font:600 13px/1.4 sans-serif;
+  text-decoration:none;color:#fff;background:#1f3a5f;box-shadow:0 2px 10px rgba(0,0,0,.18)}
+.reader-open-in:hover{filter:brightness(1.12)}
+@media print{.reader-open-in{display:none}}

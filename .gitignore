@@ -28,3 +28,6 @@ ios/*.xcodeproj/
 scripts/
 # JLPT語彙: personal path to the vocab root (sources/lessons live there, not here)
 vocab_root.txt
+# 文法 tab: paths to your own (private) lesson folders, and drop-in copies
+grammar_root.txt
+grammar/
