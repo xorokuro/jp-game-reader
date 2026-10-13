@@ -634,8 +634,10 @@ def term_entry(code, entry_id):
         first = db.execute('SELECT * FROM terms WHERE id=? AND dict=?', (int(entry_id), code)).fetchone()
         if first is None:
             raise ValueError('Entry not found in this dictionary.')
-        rows = db.execute('SELECT * FROM terms WHERE dict=? AND expression=? AND reading=? ORDER BY score DESC, sequence, id',
-                          (code, first['expression'], first['reading'])).fetchall()
+        # nexp (= normalize(expression)) lets SQLite use the (dict, nexp) index; without it every
+        # term of the dictionary was read, which took seconds for large dictionaries such as Pixiv.
+        rows = db.execute('SELECT * FROM terms WHERE dict=? AND nexp=? AND expression=? AND reading=? ORDER BY score DESC, sequence, id',
+                          (code, first['nexp'], first['expression'], first['reading'])).fetchall()
         tags = _tag_map(db, code)
         freq_codes = [x['code'] for x in dictionaries() if x['kind'] == 'freq']
         freqs = _term_freqs(db, first['expression'], freq_codes)

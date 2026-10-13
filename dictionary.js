@@ -313,7 +313,7 @@
         const word=selectedText(doc).trim();
         // Leave sentence selections intact so copying never replaces the entry.
         if(!word||word!==picked||Array.from(word).length>10||/[\r\n。！？.!?]/u.test(word))return;
-        input.value=word;searchDictionaries(true);
+        input.value=word;searchDictionaries(doc===frame.contentDocument?'entry-selection':'selection');
       },300);
     });
   }
@@ -505,7 +505,7 @@
       rememberEntryPosition();loadedEntry=null;navigation={positions:new Map(),entries:new Map()};
       spokenWord=word;panel.hidden=false;if(panel.querySelector('.dictionary-disclosure'))panel.querySelector('.dictionary-disclosure').open=true;dictionaries=result.dictionaries;frequencies=result.frequencies||[];renderFrequencies();currentCode='';renderChoices();renderTabs();
       status.textContent='“'+word+'” · '+dictionaries.filter(d=>d.entries?.length).length+' 本辭典有結果 · A / D 切換';
-      wordLabel.textContent=word;rememberWord(word);window.dispatchEvent(new CustomEvent('reader-lookup',{detail:{word}}));
+      wordLabel.textContent=word;rememberWord(word);window.dispatchEvent(new CustomEvent('reader-lookup',{detail:{word,automatic,hits:dictionaries.filter(d=>d.entries?.length&&d.kind!=='freq').length}}));
     }catch(e){if(version===requestVersion)status.textContent=e.message;}finally{if(version===requestVersion){button.disabled=false;searchPending=false;updateBack();}}
   }
   button.onclick=()=>searchDictionaries();

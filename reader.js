@@ -342,3 +342,172 @@
  addEventListener('resize',place);
  apply();
 })();
+// Full-width reading with a slide-out dictionary. A switch in the card header (全寬 / 並排) chooses,
+// for each view (読む / 台本 / 文法), between the dictionary beside the text and a drawer on the right.
+// In drawer mode the dictionary waits as a small handle on the right edge. It slides in when a word you
+// select has results (or when you click the handle, search, paste or follow a link), and tucks away
+// again with ✕, Esc or a click anywhere outside it. Drag its left edge to change the width.
+(() => {
+ const workspace=$('reader-workspace'),dictionary=$('dictionary-panel');
+ const reading=workspace?.querySelector('section.current'),head=reading?.querySelector('.card-head');
+ if(!workspace||!dictionary||!reading||!head)return;
+ const LAYOUT='jp-reader-dict-layout',WIDTH='jp-reader-drawer-w';
+ const load=(key,fallback)=>{try{const v=JSON.parse(localStorage.getItem(key)||'null');return v??fallback;}catch{return fallback;}};
+ const store=(key,value)=>{try{localStorage.setItem(key,JSON.stringify(value));}catch{}};
+ let layouts=load(LAYOUT,{});if(!layouts||typeof layouts!=='object'||Array.isArray(layouts))layouts={};
+ let width=Number(load(WIDTH,0))||0,open=false,pending=0;
+ const view=()=>reading.dataset.view||'read';
+ const drawerMode=()=>workspace.classList.contains('dict-drawer-mode');
+ if(window.readerIcons){
+  readerIcons.layoutSide='M3.6 5.3c5.6-.3 11.2-.3 16.8 0 .3 4.5.3 9-.1 13.4-5.5.3-11.1.3-16.6 0-.3-4.5-.3-9-.1-13.4ZM12.1 5.5c-.2 4.3-.2 8.7 0 13M6.4 9.2c1.4-.1 2.9-.1 3.3 0M6.4 12.2c1.4-.1 2.9-.1 3.3 0M14.4 9.2c1.4-.1 2.9-.1 3.3 0';
+  readerIcons.layoutDrawer='M3.6 5.3c4.3-.3 8.7-.3 13 0 .3 4.5.3 9-.1 13.4-4.3.3-8.6.3-12.8 0-.3-4.5-.3-9-.1-13.4ZM20.5 8.6c.3 2.3.3 4.5 0 6.8M6.8 9.4c2.9-.1 5.8-.1 6.6 0M6.8 12.3c2.9-.1 5.8-.1 6.6 0M6.8 15.2c1.9-.1 3.8-.1 4.6 0';
+ }
+ const icon=name=>window.readerIcon?readerIcon(name):'';
+
+ // Header switch, remembered per view.
+ const toggle=E('button');toggle.type='button';toggle.className='layout-toggle';
+ toggle.setAttribute('aria-label','全寬閱讀，辭典收在右側 · Full-width reading with a slide-out dictionary');
+ // Right after the 読む / 台本 / 文法 tabs (script.js swaps the title for the tabs later; the switch stays put).
+ const anchor=head.querySelector(':scope > .hand-title, :scope > .view-tabs');
+ if(anchor)anchor.after(toggle);else head.append(toggle);
+ function paintToggle(){
+  const drawer=drawerMode();
+  toggle.innerHTML=icon(drawer?'layoutSide':'layoutDrawer')+'<span>'+(drawer?'並排':'全寬')+'</span>';
+  toggle.title=drawer?'辭典改回放在旁邊 · Show the dictionary beside the text'
+   :'全寬閱讀：辭典收到右側，選到查得到的字才滑出（每個分頁各自記住）· Full width: the dictionary slides in from the right';
+  toggle.setAttribute('aria-pressed',String(drawer));
+ }
+
+ // The handle on the right edge, with the number of dictionaries that had the last word.
+ const handle=E('button');handle.type='button';handle.className='dict-drawer-handle';handle.setAttribute('aria-controls','dictionary-panel');
+ handle.innerHTML='<span class="ddh-seal" aria-hidden="true">辞</span><span class="ddh-count" hidden></span><span class="ddh-chevron" aria-hidden="true"></span>';
+ workspace.append(handle);
+ const count=handle.querySelector('.ddh-count');
+ const grip=E('div');grip.className='dict-drawer-grip';grip.title='拖曳調整辭典寬度 · 雙擊恢復';dictionary.append(grip);
+
+ function setOpen(on){
+  const next=!!on&&drawerMode();
+  if(next===open)return;
+  open=next;
+  clearTimeout(pending);            // a click outside that was about to close it no longer counts
+  if(open)dictionary.hidden=false;
+  dictionary.classList.toggle('drawer-open',open);workspace.classList.toggle('drawer-is-open',open);
+  handle.setAttribute('aria-expanded',String(open));
+  handle.title=open?'收起辭典 (Esc) · Hide the dictionary':'打開辭典 · Open the dictionary';
+  handle.setAttribute('aria-label',handle.title);
+  // Keyboard focus never stays inside a drawer that is sliding away.
+  if(!open&&dictionary.contains(document.activeElement))handle.focus({preventScroll:true});
+  dispatchEvent(new Event('reader-layout'));
+ }
+ function setMode(drawer){
+  if(drawer!==drawerMode()){
+   setOpen(false);
+   dictionary.classList.add('drawer-no-anim');
+   workspace.classList.toggle('dict-drawer-mode',drawer);
+   dictionary.hidden=false;
+   void dictionary.offsetWidth;
+   requestAnimationFrame(()=>requestAnimationFrame(()=>dictionary.classList.remove('drawer-no-anim')));
+   dispatchEvent(new Event('reader-layout'));
+  }
+  paintToggle();
+ }
+ const applyView=()=>setMode(layouts[view()]==='drawer');
+ toggle.onclick=()=>{
+  layouts={...layouts,[view()]:drawerMode()?'side':'drawer'};store(LAYOUT,layouts);
+  applyView();
+ };
+ handle.onclick=()=>setOpen(!open);
+ new MutationObserver(()=>{setOpen(false);applyView();}).observe(reading,{attributes:true,attributeFilter:['data-view']});
+
+ // ✕ tucks the drawer away instead of removing the dictionary.
+ dictionary.addEventListener('click',event=>{
+  if(!drawerMode()||!event.target.closest?.('#dict-close'))return;
+  event.preventDefault();event.stopPropagation();
+  if(window.speechSynthesis)speechSynthesis.cancel();
+  setOpen(false);
+ },true);
+
+ // Results decide: a selected word with hits opens the drawer; one without hits leaves it tucked away
+ // and nudges the handle. Typed or pasted searches always open it.
+ addEventListener('reader-lookup',event=>{
+  const detail=event.detail||{},hits=Number(detail.hits);
+  if(Number.isFinite(hits)){count.hidden=false;count.textContent=String(hits);handle.classList.toggle('no-hits',hits===0);}
+  if(!drawerMode())return;
+  if(detail.automatic==='selection'){
+   if(hits>0)setOpen(true);
+   else{setOpen(false);handle.classList.remove('nudge');void handle.offsetWidth;handle.classList.add('nudge');}
+  }else if(!detail.automatic)setOpen(true);
+ });
+ handle.addEventListener('animationend',()=>handle.classList.remove('nudge'));
+
+ // A click anywhere outside tucks it away. Dragging to select text does not; the lookup decides.
+ let press=null;
+ const overlays='#theme-drawer,#theme-scrim,.sheet,.toast,[role="dialog"]';
+ function watch(doc){
+  doc.addEventListener('pointerdown',event=>{
+   press=null;
+   if(!open||event.button!==0)return;
+   const target=event.target;
+   if(doc===document&&(dictionary.contains(target)||handle.contains(target)||target.closest?.(overlays))){clearTimeout(pending);return;}
+   press={doc,x:event.clientX,y:event.clientY};
+  },true);
+  doc.addEventListener('pointerup',event=>{
+   const start=press;press=null;
+   if(!start||start.doc!==doc||Math.hypot(event.clientX-start.x,event.clientY-start.y)>5)return;
+   clearTimeout(pending);
+   pending=setTimeout(()=>{
+    const selection=doc.getSelection?.();
+    if(selection&&!selection.isCollapsed&&selection.toString().trim())return; // a double-click picked a word
+    setOpen(false);
+   },330);
+  },true);
+  doc.addEventListener('dblclick',()=>clearTimeout(pending),true);
+  // Capture phase: decide before the theme drawer or the shortcut sheet close themselves on Esc.
+  doc.addEventListener('keydown',onKey,true);
+ }
+ function onKey(event){
+  if(event.key!=='Escape'||!open||event.defaultPrevented)return;
+  if(document.querySelector('#theme-drawer.open,#theme-drawer[aria-hidden="false"],.sheet:not([hidden])'))return;
+  // Esc in another text box (the script search clears itself) is not meant for the dictionary.
+  const target=event.target;
+  if(target?.closest?.('input,textarea,select,[contenteditable="true"],[contenteditable="plaintext-only"]')&&!dictionary.contains(target))return;
+  const pops=dictionary.querySelectorAll('.dict-pop[open]');
+  event.preventDefault();
+  if(pops.length){pops.forEach(pop=>pop.open=false);return;}
+  setOpen(false);
+ }
+ watch(document);
+ // Grammar lessons (and other pages shown in the reading card) are documents of their own.
+ const lookup=window.readerDictionary;
+ if(lookup?.attach){
+  const attach=lookup.attach.bind(lookup);
+  lookup.attach=doc=>{attach(doc);try{if(doc&&!doc.__readerDrawer){doc.__readerDrawer=true;watch(doc);}}catch{}};
+ }
+ // Esc also works while reading inside a dictionary entry.
+ const entryFrame=$('dict-frame');
+ entryFrame?.addEventListener('load',()=>{try{const doc=entryFrame.contentDocument;if(doc&&!doc.__readerDrawer){doc.__readerDrawer=true;doc.addEventListener('keydown',onKey);}}catch{}});
+
+ // Width: drag the drawer's left edge; double-click to reset. Saved with your reader preferences.
+ const paintWidth=()=>{if(width)workspace.style.setProperty('--dict-drawer-w',Math.round(width)+'px');else workspace.style.removeProperty('--dict-drawer-w');};
+ grip.addEventListener('pointerdown',event=>{
+  if(event.button!==0)return;
+  event.preventDefault();event.stopPropagation();grip.setPointerCapture(event.pointerId);
+  document.body.classList.add('ws-resizing');workspace.classList.add('drawer-resizing');
+  const move=e=>{width=Math.max(360,Math.min(innerWidth-80,innerWidth-e.clientX));paintWidth();};
+  const up=()=>{
+   grip.releasePointerCapture?.(event.pointerId);document.body.classList.remove('ws-resizing');workspace.classList.remove('drawer-resizing');
+   grip.removeEventListener('pointermove',move);grip.removeEventListener('pointerup',up);grip.removeEventListener('pointercancel',up);
+   store(WIDTH,Math.round(width));
+  };
+  grip.addEventListener('pointermove',move);grip.addEventListener('pointerup',up);grip.addEventListener('pointercancel',up);
+ });
+ grip.addEventListener('dblclick',()=>{width=0;paintWidth();try{localStorage.removeItem(WIDTH);}catch{}});
+ // Another window of the reader changed the layout: follow it.
+ addEventListener('storage',event=>{
+  if(event.key===LAYOUT){layouts=load(LAYOUT,{})||{};applyView();}
+  if(event.key===WIDTH){width=Number(load(WIDTH,0))||0;paintWidth();}
+ });
+ paintWidth();applyView();
+ handle.setAttribute('aria-expanded','false');handle.title='打開辭典 · Open the dictionary';handle.setAttribute('aria-label',handle.title);
+ window.readerDrawer={get mode(){return drawerMode()?'drawer':'side';},get open(){return open;},setOpen,setMode:mode=>{layouts={...layouts,[view()]:mode==='drawer'?'drawer':'side'};store(LAYOUT,layouts);applyView();}};
+})();

@@ -124,3 +124,16 @@ an OBS projector; native game rendering modes require testing with the actual ga
 - The 總目錄's 已學 checkmarks are stored per browser address, so ticks made while opening the
   file directly are not shown here; move them once with 匯出進度 → 匯入進度.
 - A lesson opened in its own browser tab shows **在閱讀器中開啟**, which reopens it in the 文法 tab.
+
+## 全寬 · Full-width reading with a slide-out dictionary
+
+- The switch after the 読む / 台本 / 文法 tabs (**全寬** / **並排**) chooses, for each view, between
+  the dictionary beside the text and full-width reading with the dictionary in a drawer on the right.
+- In full-width mode the dictionary waits as a small **辞** handle on the right edge, with the number
+  of dictionaries that had the last word. Selecting a word slides the drawer in only when a dictionary
+  has it; otherwise the handle gives a short nudge. Typed or pasted searches and the handle always open it.
+- ✕, Esc or a click anywhere outside tucks it away; dragging to select more text does not count as a
+  click. Drag the drawer's left edge to change its width (double-click to reset). The layout per view
+  and the width are kept with the portable preferences (`jp-reader-dict-layout`, `jp-reader-drawer-w`).
+- `reader-lookup` events carry `{word, automatic, hits}`; `automatic` is `'selection'` for the page and
+  `'entry-selection'` inside an entry. `window.readerDrawer` exposes `mode`, `open`, `setOpen()` and `setMode()`.
