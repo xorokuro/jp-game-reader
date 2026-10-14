@@ -725,6 +725,23 @@ mark{background:color-mix(in srgb,var(--accent-3) 45%,transparent);color:inherit
 :root[data-design="fable"] #doodles,:root[data-design="yohaku"] #doodles{opacity:.8}
 :root[data-design="fable"] .topbar::after,:root[data-design="yohaku"] .topbar::after{height:1px;bottom:0;mask:none;-webkit-mask:none}
 
+/* 手繪 Hand-drawn scenes (organic-bg.js): the watercolour picture is the page, and the
+   cards are frosted paper laid over it. Paper grain is painted into the picture itself. */
+.preset-art.organic-art{height:104px}
+.preset-art.organic-art canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+:root[data-design="organic"]{--see:64%;--shadow:0 1px 0 var(--line),0 22px 40px -28px color-mix(in srgb,var(--ink) 50%,transparent)}
+:root[data-design="organic"] #doodles{opacity:1}
+:root[data-design="organic"] body::after{display:none}
+:root[data-design="organic"] :is(.panel,article,section.current,#dictionary-panel,.settings-grid>details,.settings-grid>section){
+ background:color-mix(in srgb,var(--card) var(--see),transparent);
+ backdrop-filter:blur(7px) saturate(1.05);-webkit-backdrop-filter:blur(7px) saturate(1.05);
+}
+:root[data-design="organic"] :is(section.current,#dictionary-panel,.settings-grid>*,article)::after,
+:root[data-design="organic"] :is(section.current,#dictionary-panel)::before{display:none}
+:root[data-design="organic"] .topbar{background:color-mix(in srgb,var(--paper) 62%,transparent)}
+/* The dictionary drawer slides over the text: keep it nearly opaque. */
+:root[data-design="organic"] #reader-workspace.dict-drawer-mode #dictionary-panel{background:color-mix(in srgb,var(--card) 94%,transparent)}
+
 /* Script controls stay visible while the lines scroll, including on narrow screens. */
 #reader-workspace section.current[data-view="script"]{display:flex;flex-direction:column;height:var(--ws-h,calc(100dvh - 104px));min-height:520px}
 #script-view{overflow:hidden}

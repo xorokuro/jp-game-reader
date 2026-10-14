@@ -492,7 +492,7 @@ def main():
                     if re.search(r'(\.html?|/[^./]*)$',p,re.I):return self.send(grammar_library.missing_page(unquote(p),str(e)),404,'text/html; charset=utf-8')
                     return self.send({'error':str(e)},404)
                 return self.send(raw,mime=mime)
-            if p in ['/','/index.html','/app.js','/translations.js','/style.css','/dictionary.js','/dictionary.css','/dictionary-entry.css','/deepl-web.js','/reader.js','/theme.js','/script.js','/grammar.js','/grammar-frame.js','/grammar-frame.css']:
+            if p in ['/','/index.html','/app.js','/translations.js','/style.css','/dictionary.js','/dictionary.css','/dictionary-entry.css','/deepl-web.js','/reader.js','/organic-bg.js','/theme.js','/script.js','/grammar.js','/grammar-frame.js','/grammar-frame.css']:
                 name='index.html' if p=='/' else p[1:];mime={'html':'text/html','js':'text/javascript','css':'text/css'}[name.rsplit('.',1)[1]]
                 raw=(HERE/name).read_bytes()
                 if name=='dictionary-entry.css':

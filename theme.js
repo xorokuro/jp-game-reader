@@ -626,6 +626,14 @@
   }
 });
  const IOS_ORDER=["fable", "fable-sage", "fable-blush", "fable-dusk", "fable-night", "fable-graph", "fable-sundown", "fable-midnight", "fable-mist", "fable-ballpoint", "fable-echo", "fable-roots", "fable-evening", "fable-still", "fable-ebru", "fable-cyanotype", "fable-transit", "fable-oneline", "fable-phool", "fable-doublure", "yohaku", "yohaku-washi", "yohaku-seiji", "yohaku-kiri", "yohaku-wara", "yohaku-sumi"];
+ // 手繪 Hand-drawn scenes (organic-bg.js): a watercolour picture is the page and the cards are
+ // frosted paper over it. The iPhone app ships the same seventeen pictures.
+ const ORGANIC=(window.OrganicBG?window.OrganicBG.presets():[]).map(o=>{
+  PRESETS[o.key]={zh:o.zh,en:o.en,group:'Organic',design:'organic',scene:o.scene,variant:o.variant,mode:o.mode,paper:o.paper,card:o.card,ink:o.ink,
+   accent:o.accent,accent2:o.chosen,accent3:o.line,spark:o.accent,muted:o.muted,doodles:[o.line],motifs:['star'],fall:''};
+  return o.key;
+ });
+ const ORGANIC_DENSITY={none:0,calm:.6,normal:1,lively:1.45};
  const FONTS={
   kyokasho:{zh:'教科書體',en:'Textbook',css:'"UD Digi Kyokasho N-R","UD デジタル 教科書体 N-R","UD Digi Kyokasho NK-R","Klee One","Yu Mincho",serif'},
   gothic:{zh:'黑體',en:'Gothic',css:'"Yu Gothic UI","Yu Gothic","Noto Sans JP","Hiragino Kaku Gothic ProN","Meiryo",sans-serif'},
@@ -633,7 +641,7 @@
  };
  const DENSITY={none:0,calm:10,normal:18,lively:30};
  const LIMITS={jp:[18,48],translation:[14,36],spacing:[1.3,2.6],width:[900,2200],radius:[4,30]};
- const DEFAULTS={preset:'washi',custom:{},density:'normal',grain:true,falling:true,font:'kyokasho',jp:30,translation:20,spacing:1.9,width:1640,radius:20};
+ const DEFAULTS={preset:'washi',custom:{},density:'normal',grain:true,falling:true,motion:false,font:'kyokasho',jp:30,translation:20,spacing:1.9,width:1640,radius:20};
 
  let theme={...DEFAULTS,custom:{}};
  function clamp(k,v){const [a,b]=LIMITS[k];return Math.max(a,Math.min(b,v));}
@@ -643,7 +651,7 @@
    if(PRESETS[saved.preset])theme.preset=saved.preset;
    if(saved.custom&&typeof saved.custom==='object')for(const k of ['paper','card','accent'])if(/^#[0-9a-f]{6}$/i.test(saved.custom[k]||''))theme.custom[k]=saved.custom[k].toLowerCase();
    if(DENSITY[saved.density]!==undefined)theme.density=saved.density;
-   for(const k of ['grain','falling'])if(typeof saved[k]==='boolean')theme[k]=saved[k];
+   for(const k of ['grain','falling','motion'])if(typeof saved[k]==='boolean')theme[k]=saved[k];
    if(FONTS[saved.font])theme.font=saved.font;
    for(const k of Object.keys(LIMITS))if(Number.isFinite(saved[k]))theme[k]=clamp(k,saved[k]);
    return;
@@ -836,8 +844,19 @@
   return `<svg viewBox="0 0 1180 860" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${backdrop}</svg>`;
  }
 
+ // 手繪 scenes: one canvas that follows the window size (organic-bg.js); "none" leaves plain paper.
+ let organic=null;
+ function drawOrganic(p,host){
+  const density=ORGANIC_DENSITY[theme.density];
+  if(!density){if(organic){organic.stop();organic=null;}host.replaceChildren();return;}
+  const opts={scene:p.scene,variant:p.variant,density,grain:theme.grain,motion:theme.motion};
+  if(organic&&organic.canvas.parentNode===host)organic.update(opts);
+  else{if(organic)organic.stop();organic=window.OrganicBG.mount(host,opts);}
+ }
  function drawDoodles(p){
   const host=document.getElementById('doodles');if(!host)return;
+  if(p.design==='organic'&&window.OrganicBG){lastDoodle='';drawOrganic(p,host);return;}
+  if(organic){organic.stop();organic=null;}
   const count=DENSITY[theme.density];
   const signature=[theme.preset,count,p.paper,p.doodles?.join()].join('|');
   if(signature===lastDoodle)return;lastDoodle=signature;
@@ -922,22 +941,39 @@
   const strokes=(MOTIFS[p.motifs[0]]||MOTIFS.star)();
   art.innerHTML=`<svg viewBox="-30 -30 60 60" aria-hidden="true"><g stroke="${p.doodles[0]}" stroke-linecap="round" stroke-linejoin="round">${strokes.map(s=>`<path d="${smooth(poly(s.at?move(s.pts,...s.at):s.pts,22),!!s.closed)}" fill="${s.fill?p.doodles[0]:'none'}" fill-opacity="${s.fill||0}" stroke-width="1.8"/>`).join('')}</g></svg><i></i><i></i>`;
   if(p.art){art.innerHTML=iosArt(p);art.classList.add('ios-art');}
+  if(p.design==='organic'){const c=make('canvas');art.replaceChildren(c);art.classList.add('organic-art');thumbLater(c,p);}
   b.title=p.en;
   const names=make('span','preset-name');names.append(make('b','',p.zh),make('small','',p.en));
   b.append(art,names);
   b.onclick=()=>{theme.preset=key;theme.custom={};apply();};
   return b;
  }
+ // Scene previews are painted only when their card scrolls into view, one at a time.
+ let thumbWatch=null,thumbBusy=false;const thumbQueue=[];
+ function thumbLater(canvas,p){
+  canvas.dataset.scene=p.scene;canvas.dataset.variant=p.variant;
+  if(!('IntersectionObserver' in window)){thumbQueue.push(canvas);return pumpThumbs();}
+  thumbWatch??=new IntersectionObserver(entries=>{for(const e of entries)if(e.isIntersecting){thumbWatch.unobserve(e.target);thumbQueue.push(e.target);}pumpThumbs();},{rootMargin:'160px'});
+  thumbWatch.observe(canvas);
+ }
+ function pumpThumbs(){
+  if(thumbBusy||!thumbQueue.length)return;thumbBusy=true;
+  setTimeout(()=>{
+   thumbBusy=false;const c=thumbQueue.shift();
+   if(c?.isConnected&&window.OrganicBG){try{window.OrganicBG.thumb(c,{scene:c.dataset.scene,variant:c.dataset.variant});}catch(e){console.error(e);}}
+   pumpThumbs();
+  },16);
+ }
  let pickers={};
  function build(){
   const presets=$('theme-presets');if(!presets)return;
   presets.replaceChildren();
-  for(const [label,keys] of [['iPhone · Fable',IOS_ORDER.filter(k=>PRESETS[k].group==='Fable')],['iPhone · 余白 Yohaku',IOS_ORDER.filter(k=>PRESETS[k].group==='Yohaku')],['經典 · Classic',ORDER]]){
-   presets.append(make('h4','preset-heading',label),...keys.map(preview));
+  for(const [label,keys] of [['手繪 · Hand-drawn scenes',ORGANIC],['iPhone · Fable',IOS_ORDER.filter(k=>PRESETS[k].group==='Fable')],['iPhone · 余白 Yohaku',IOS_ORDER.filter(k=>PRESETS[k].group==='Yohaku')],['經典 · Classic',ORDER]]){
+   if(keys.length)presets.append(make('h4','preset-heading',label),...keys.map(preview));
   }
   segmented($('theme-density'),[['none','無'],['calm','少少'],['normal','適中'],['lively','熱鬧']],()=>theme.density,v=>theme.density=v);
   segmented($('theme-font'),Object.entries(FONTS).map(([k,v])=>[k,v.zh]),()=>theme.font,v=>theme.font=v);
-  for(const [id,key] of [['theme-grain','grain'],['theme-falling','falling']]){const box=$(id);box.onchange=()=>{theme[key]=box.checked;apply();};}
+  for(const [id,key] of [['theme-grain','grain'],['theme-falling','falling'],['theme-motion','motion']]){const box=$(id);if(box)box.onchange=()=>{theme[key]=box.checked;apply();};}
   const sizes=$('theme-sizes');sizes.replaceChildren();sliders.length=0;
   slider(sizes,'jp','日文字級 · Japanese size',1,'px');slider(sizes,'translation','翻譯字級 · Translation size',1,'px');
   slider(sizes,'spacing','行距 · Line spacing',.05);slider(sizes,'width','版面寬度 · Page width',10,'px');slider(sizes,'radius','圓角 · Roundness',1,'px');
@@ -955,6 +991,7 @@
   for(const b of $('theme-presets').querySelectorAll('button'))b.setAttribute('aria-pressed',String(b.dataset.preset===theme.preset));
   $('theme-density').sync?.();$('theme-font').sync?.();
   $('theme-grain').checked=theme.grain;$('theme-falling').checked=theme.falling;
+  if($('theme-motion'))$('theme-motion').checked=theme.motion;
   for(const s of sliders)s();
   const p=current||palette();for(const [k,input] of Object.entries(pickers))input.value=p[k];
   $('theme-custom-reset').hidden=!Object.keys(theme.custom).length;
