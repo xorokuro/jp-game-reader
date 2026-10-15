@@ -626,8 +626,9 @@
   }
 });
  const IOS_ORDER=["fable", "fable-sage", "fable-blush", "fable-dusk", "fable-night", "fable-graph", "fable-sundown", "fable-midnight", "fable-mist", "fable-ballpoint", "fable-echo", "fable-roots", "fable-evening", "fable-still", "fable-ebru", "fable-cyanotype", "fable-transit", "fable-oneline", "fable-phool", "fable-doublure", "yohaku", "yohaku-washi", "yohaku-seiji", "yohaku-kiri", "yohaku-wara", "yohaku-sumi"];
- // 手繪 Hand-drawn scenes (organic-bg.js): a watercolour picture is the page and the cards are
- // frosted paper over it. The iPhone app ships the same seventeen pictures.
+ // 手繪 Hand-drawn and 異界 Otherworld scenes (organic-bg.js): a watercolour picture is the page and
+ // the cards are frosted paper over it. The iPhone app ships the seventeen hand-drawn pictures.
+ const OTHERWORLD=['hyoryu','tenrin','kago','fusei','obi','tokosen','uzu','ien'];
  const ORGANIC=(window.OrganicBG?window.OrganicBG.presets():[]).map(o=>{
   PRESETS[o.key]={zh:o.zh,en:o.en,group:'Organic',design:'organic',scene:o.scene,variant:o.variant,mode:o.mode,paper:o.paper,card:o.card,ink:o.ink,
    accent:o.accent,accent2:o.chosen,accent3:o.line,spark:o.accent,muted:o.muted,doodles:[o.line],motifs:['star'],fall:''};
@@ -968,7 +969,7 @@
  function build(){
   const presets=$('theme-presets');if(!presets)return;
   presets.replaceChildren();
-  for(const [label,keys] of [['手繪 · Hand-drawn scenes',ORGANIC],['iPhone · Fable',IOS_ORDER.filter(k=>PRESETS[k].group==='Fable')],['iPhone · 余白 Yohaku',IOS_ORDER.filter(k=>PRESETS[k].group==='Yohaku')],['經典 · Classic',ORDER]]){
+  for(const [label,keys] of [['手繪 · Hand-drawn scenes',ORGANIC.filter(k=>!OTHERWORLD.includes(PRESETS[k].scene))],['異界 · Otherworld scenes',ORGANIC.filter(k=>OTHERWORLD.includes(PRESETS[k].scene))],['iPhone · Fable',IOS_ORDER.filter(k=>PRESETS[k].group==='Fable')],['iPhone · 余白 Yohaku',IOS_ORDER.filter(k=>PRESETS[k].group==='Yohaku')],['經典 · Classic',ORDER]]){
    if(keys.length)presets.append(make('h4','preset-heading',label),...keys.map(preview));
   }
   segmented($('theme-density'),[['none','無'],['calm','少少'],['normal','適中'],['lively','熱鬧']],()=>theme.density,v=>theme.density=v);
