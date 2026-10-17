@@ -105,7 +105,7 @@
   let targets=[],activeMode='paste';
   function showSource(){
     windows.hidden=refresh.hidden=mode.value!=='window'&&mode.value!=='game';
-    hint.textContent=mode.value==='paste'?'Paste, read and look up words without OBS or a running game.':mode.value==='obs'?'Keep the OBS projector visible. Capture uses OCR; it does not read game memory.':mode.value==='game'?'遊戲連動：直接讀取遊戲目前顯示的台詞編號（唯讀，不用 OCR，對話框被擋住也沒關係），再顯示台本裡同一句的日文＋譯文。選遊戲視窗後按 Use this source。目前支援 Pal 引擎遊戲（例：ディメンション凸ラバース!!）。':'Choose a visible game window. Keep its dialogue uncovered. Use OBS if the game cannot be captured directly.';
+    hint.textContent=mode.value==='paste'?'Paste, read and look up words without OBS or a running game.':mode.value==='obs'?'Keep the OBS projector visible. Capture uses OCR; it does not read game memory.':mode.value==='game'?'遊戲連動：直接讀取遊戲目前顯示的台詞編號（唯讀，不用 OCR，對話框被擋住也沒關係），再顯示台本裡同一句的日文＋譯文。選遊戲視窗後按 Use this source。目前支援 Pal 引擎（例：ディメンション凸ラバース!!）和 M2 Kaleido 引擎（例：STEINS;GATE RE:BOOT）。':'Choose a visible game window. Keep its dialogue uncovered. Use OBS if the game cannot be captured directly.';
   }
   function applyMode(value){
     activeMode=value;document.body.dataset.inputMode=value;

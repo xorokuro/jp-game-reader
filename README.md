@@ -57,14 +57,21 @@ translations), and the 台本 tab scrolls along while it is open.
 
 - Read-only: `game_link.py` opens the game process with query and read rights and
   uses ReadProcessMemory. It never writes to, injects into or pauses the game.
-- It needs the game's extracted 台本 with the engine's own line numbers as row
-  `id`s (source `main`). Lines missing from the 台本 are still shown, without a
-  translation.
-- Supported engine: Pal (`dll\Pal.dll`). Tested on Windows with
-  ディメンション凸ラバース!!. Other engines need their own adapter in `game_link.py`.
+- It needs the game's extracted 台本, with row keys (`source|id`) in the engine's own
+  numbering. Lines missing from the 台本 are still shown, without a translation,
+  when the engine reports their text.
+- Supported engines (others need their own adapter in `game_link.py`):
+  - Pal (`dll\Pal.dll`): source `main`, id = the engine's line number. Tested on
+    Windows with ディメンション凸ラバース!!.
+  - M2 Kaleido ADV Workshop (Squirrel scripts, 64-bit): source `scenario/<file>.ks`,
+    id `<label>#<line in that scene, from 0>` — the layout of the scenario
+    extraction, e.g. `scenario/resg01_06.ks|*start#15`. Tested on Windows with
+    STEINS;GATE RE:BOOT (`sgre_steam.exe`), including its dual-subtitle patch.
+    After returning to the title or loading a save the link finds the new scene by itself.
 - The dialogue box does not need to be visible, and the game can stay fullscreen.
   If the game restarts, the link reconnects to the same executable on its own.
-- Diagnostic: `python game_link.py` prints each new line while you play.
+- Diagnostic: `python game_link.py` prints each new line while you play
+  (`--script <script.json>` also prints the 台本's Japanese for each line).
 
 ## Translation engines
 

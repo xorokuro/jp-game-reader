@@ -4,23 +4,34 @@ Read-only: the reader opens the game process with query + read rights only and
 calls ReadProcessMemory. It never writes to, injects into or pauses the game.
 Windows only; other platforms report the link as unavailable.
 
-Engines are small adapters. Each one finds the game's own line number for the
-text on screen, which matches the ``id`` of that line in an extracted 台本
-(rows use ``source`` "main" and ``id`` = the engine's line number).
+Engines are small adapters. Each one reports where the line on screen is in the
+game's own script, as the key (``source|id``) of that line in an extracted 台本.
 
-Supported engine:
+Supported engines:
 
 * Pal (CRYSTALiA's ディメンション凸ラバース!! and other games built on dll\\Pal.dll).
   The script VM keeps the current line as a byte offset into TEXT.DAT; the
   4-byte header of that entry is the line number. The VM context is found by
   scanning for the loaded TEXT.DAT buffer ("_TEXT_LIST__") and the context
   field that points at it, verified by the script buffer ("Sv20").
+  台本 rows: ``source`` "main", ``id`` = the engine's line number.
 
-Command line (diagnostic): ``python game_link.py [--pid N] [--process NAME]``
+* Kaleido (M2's Kaleido ADV Workshop with Squirrel scripts, 64-bit; tested with
+  STEINS;GATE RE:BOOT, sgre_steam.exe). The scene player (class ScenePlayer in
+  envplayer.nut) keeps the line on screen in two fields: curSceneName
+  ("resg01_06.ks*start" = scenario file + label) and curTextId (1-based index
+  into that scene's texts). The player is found by the types of its
+  consecutive fields curSceneName … outlineCur; after the title screen or a
+  load the game makes a new player, which is found again by itself.
+  台本 rows: ``source`` "scenario/<file>", ``id`` "<label>#<0-based index>"
+  (the layout of the scenario extraction, e.g. "scenario/resg01_06.ks|*start#15").
+
+Command line (diagnostic): ``python game_link.py [--pid N] [--process NAME] [--script script.json]``
 prints each new line as you advance the game.
 """
 import argparse
 import ctypes
+import json
 import os
 import re
 import struct
@@ -65,6 +76,7 @@ PROCESS_QUERY_INFORMATION, PROCESS_VM_READ = 0x0400, 0x0010
 MEM_COMMIT, MEM_PRIVATE = 0x1000, 0x20000
 READABLE = 0x02 | 0x04 | 0x08 | 0x20 | 0x40 | 0x80     # PAGE_READONLY … PAGE_EXECUTE_WRITECOPY
 PAGE_GUARD = 0x100
+UNCACHED = 0x200 | 0x400                               # PAGE_NOCACHE, PAGE_WRITECOMBINE: slow, never script data
 STILL_ACTIVE = 259
 CHUNK = 16 * 1024 * 1024
 
@@ -98,11 +110,11 @@ class Process:
 
     def __init__(self, pid):
         if os.name != 'nt':
-            raise LinkError('Game link needs Windows.')
+            raise LinkError('遊戲連動只能在 Windows 上使用。')
         self.pid = int(pid)
         self.handle = _kernel.OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, False, self.pid)
         if not self.handle:
-            raise LinkError('Cannot open the game process (it closed, or runs as administrator).')
+            raise LinkError('打不開遊戲程式（遊戲已關閉，或遊戲以系統管理員身分執行）。')
 
     def close(self):
         if self.handle:
@@ -133,7 +145,7 @@ class Process:
             base, size = info.BaseAddress or 0, info.RegionSize
             if size <= 0:
                 break
-            if (info.State == MEM_COMMIT and info.Protect & READABLE and not info.Protect & PAGE_GUARD
+            if (info.State == MEM_COMMIT and info.Protect & READABLE and not info.Protect & (PAGE_GUARD | UNCACHED)
                     and (info.Type == MEM_PRIVATE or not private_only)):
                 yield base, size
             address = base + size
@@ -160,10 +172,33 @@ class Process:
                 offset += len(data)
         return hits
 
+    def scan(self, pattern, aligned=1, limit=32, overlap=1024):
+        """Start addresses of matches of a compiled bytes regex in private memory.
+        ``overlap`` must be at least the longest possible match."""
+        hits = []
+        for base, size in self.regions():
+            offset = 0
+            while offset < size:
+                n = min(CHUNK, size - offset)
+                data = self.read(base + offset, n + min(overlap, size - offset - n))
+                if not data:
+                    break
+                for match in pattern.finditer(data):
+                    if match.start() >= n:          # starts in the overlap: the next chunk reports it
+                        break
+                    at = base + offset + match.start()
+                    if at % aligned == 0:
+                        hits.append(at)
+                        if len(hits) >= limit:
+                            return hits
+                offset += n
+        return hits
+
 
 class PalEngine:
     """Pal engine (dll\\Pal.dll). Offsets are from the VM context (task data + 0x338)."""
     name = 'Pal'
+    exes = ('totsulover.exe',)                     # only orders the search; any Pal game is detected
     TEXT_PTR, TEXT_SIZE = 0x3F158, 0x3F168        # loaded TEXT.DAT buffer and its size
     SCRIPT_PTR = 0x55E94                           # loaded SCRIPT.SRC buffer ("Sv20")
     CURRENT = 0x4 + 0x1094                         # text window: TEXT.DAT offset of the line on screen
@@ -189,6 +224,9 @@ class PalEngine:
                     return engine
         return None
 
+    def describe(self):
+        return f'context=0x{self.context:08X} TEXT=0x{self.text:08X} size={self.size} lines={self.count}'
+
     def entry(self, offset):
         """(line number, raw cp932 text) of the TEXT.DAT entry at ``offset``."""
         if offset is None or not 16 <= offset < self.size - 4:
@@ -203,17 +241,134 @@ class PalEngine:
         return number, raw[4:end if end != -1 else None]
 
     def current(self):
-        """The line on screen: {'number', 'text', 'speaker'} or None (no line yet)."""
+        """The line on screen: {'key', 'label', 'number', 'text', 'speaker'} or None (no line yet)."""
         found = self.entry(self.process.u32(self.context + self.CURRENT))
         if not found:
             return None
         number, raw = found
         name = self.entry(self.process.u32(self.context + self.NAME))
-        return {'number': number, 'text': visible(raw), 'speaker': visible(name[1]) if name else ''}
+        return {'key': f'main|{number}', 'label': f'#{number}', 'number': number,
+                'text': visible(raw), 'speaker': visible(name[1]) if name else ''}
 
 
-ENGINES = (PalEngine,)
+class KaleidoEngine:
+    """M2 Kaleido ADV Workshop (Squirrel VM, 64-bit), e.g. STEINS;GATE RE:BOOT.
+
+    Squirrel values (SQObjectPtr) are 16 bytes: a 4-byte type tag, padding and an
+    8-byte value; integers are 32-bit. A class instance stores its fields as
+    consecutive values in declaration order. Strings (SQString) keep their byte
+    length at +0x28 and their UTF-8 text at +0x38.
+    """
+    name = 'Kaleido'
+    exes = ('sgre_steam.exe',)                     # only orders the search; any matching game is detected
+    NULL, INTEGER, BOOL, STRING = 0x01000001, 0x05000002, 0x01000008, 0x08000010
+    # ScenePlayer fields from curSceneName on (envplayer.nut): 0 curSceneName, 1 curSceneId, 2 curSceneInfo,
+    # 3 curSceneSelect, 4 curTextStart, 5 cur, 6 curPoint, 7 curLine, 8 curTextId, 9 curReaded, 10 curEvent,
+    # 11 curSelectIdx, 12 saveText, 13 saveTextInit, 14 outlineMode, 15 outlineCur.
+    SLOTS, SCENE, TEXT = 16, 0, 8
+    TYPES = {3: BOOL, 4: INTEGER, 8: INTEGER, 9: BOOL, 10: BOOL, 11: INTEGER, 14: BOOL, 15: INTEGER}
+    FIRST = min(TYPES)                             # the search pattern starts at this field
+    PATTERN = None                                 # set below the class: the type tags of fields FIRST … max(TYPES)
+    MARK = b'curTextId'                            # the field name, interned as a Squirrel string
+    SCENE_NAME = re.compile(r'[^\s*\x00]{1,160}(?:\*[^\s*\x00]{0,160})?')
+    LONGEST_WAIT = 4.0                             # seconds between searches while no line is shown
+
+    def __init__(self, process):
+        self.process = process
+        self.player = None                         # address of the curSceneName field
+        self.next_search = 0.0
+        self.misses = 0
+
+    @classmethod
+    def detect(cls, process):
+        """The engine when the game runs Kaleido's scene player script, else None. The player
+        itself may not exist yet (title screen); ``current`` keeps looking for it."""
+        for at in process.find(cls.MARK + b'\0', limit=8):
+            if process.u32(at - 0x38 + 0x28) == len(cls.MARK):
+                engine = cls(process)
+                engine.locate()
+                return engine
+        return None
+
+    def describe(self):
+        return f'player=0x{self.player:X}' if self.player is not None else '等待進入劇情（標題畫面時找不到台詞）'
+
+    def string(self, address):
+        """Text of the Squirrel string at ``address``, or None."""
+        size = self.process.u32(address + 0x28)
+        if size is None or not 0 < size <= 512:
+            return None
+        body = self.process.read(address + 0x38, size + 1)
+        if not body or len(body) != size + 1 or body[size] != 0:
+            return None
+        try:
+            return body[:size].decode('utf-8')
+        except UnicodeDecodeError:
+            return None
+
+    def read_line(self, field):
+        """The line the player at ``field`` shows; None while it shows none; False if ``field`` is not a player."""
+        raw = self.process.read(field, self.SLOTS * 16) if field is not None else None
+        if not raw or len(raw) < self.SLOTS * 16:
+            return False
+        tag = lambda slot: struct.unpack_from('<I', raw, 16 * slot)[0]
+        if any(tag(slot) != kind for slot, kind in self.TYPES.items()):
+            return False
+        if tag(self.SCENE) == self.NULL:
+            return None
+        if tag(self.SCENE) != self.STRING:
+            return False
+        scene = self.string(struct.unpack_from('<Q', raw, 16 * self.SCENE + 8)[0])
+        if not scene or not self.SCENE_NAME.fullmatch(scene):
+            return False
+        number = struct.unpack_from('<i', raw, 16 * self.TEXT + 8)[0] - 1    # curTextId is 1-based
+        if number < 0:
+            return None
+        storage, star, label = scene.partition('*')
+        storage = storage.replace('\\', '/').rsplit('/', 1)[-1]
+        label = star + label
+        return {'key': f'scenario/{storage}|{label}#{number}', 'label': f'{storage} {label}#{number}',
+                'number': number, 'text': '', 'speaker': ''}
+
+    def locate(self):
+        """Search memory for the scene player; prefer one that shows a line."""
+        best, best_line = None, False
+        for at in self.process.scan(self.PATTERN, aligned=8, limit=64, overlap=256):
+            field = at - 16 * self.FIRST
+            line = self.read_line(field)
+            if line is not False and (best is None or (line and not best_line)):
+                best, best_line = field, line
+        self.player = best
+        return best_line
+
+    def current(self):
+        """The line on screen: {'key', 'label', 'number', 'text', 'speaker'} or None (no line yet)."""
+        line = self.read_line(self.player)
+        if line:
+            self.misses = 0
+            return line
+        # No line: on the title screen, while loading, or the player was replaced (after a load
+        # the game makes a new one and empties the old). Search again, at most every 0.5–4 s.
+        now = time.monotonic()
+        if now < self.next_search:
+            return None
+        line = self.locate()
+        self.misses = 0 if line else self.misses + 1
+        self.next_search = now + min(self.LONGEST_WAIT, 0.5 * 2 ** self.misses)
+        return line or None
+
+
+KaleidoEngine.PATTERN = re.compile(b''.join(
+    re.escape(struct.pack('<I', KaleidoEngine.TYPES[slot])) + b'.{12}' if slot in KaleidoEngine.TYPES else b'.{16}'
+    for slot in range(KaleidoEngine.FIRST, max(KaleidoEngine.TYPES) + 1)), re.S)
+ENGINES = (PalEngine, KaleidoEngine)
 TAGS = re.compile(r'<r[^<>]*>|</r>|</?d\d*>|</?s\d*>|<[^<>]{0,40}>')
+
+
+def engines_for(exe=''):
+    """Engines in the order to try them: those known for this executable first."""
+    exe = (exe or '').lower()
+    return sorted(ENGINES, key=lambda engine: exe not in engine.exes)
 
 
 def visible(raw):
@@ -228,17 +383,17 @@ def visible(raw):
 class Link:
     """Attach to one game process and report its current line."""
 
-    def __init__(self, pid):
+    def __init__(self, pid, exe=''):
         self.process = Process(pid)
         self.engine = None
-        for engine in ENGINES:
+        for engine in engines_for(exe):
             self.engine = engine.detect(self.process)
             if self.engine:
                 break
         if not self.engine:
             self.process.close()
-            raise LinkError('This game is not supported for direct reading yet (supported: Pal engine games). '
-                            'If it is still starting up, wait for the title screen and try again.')
+            raise LinkError('這個遊戲還不能直接讀取（目前支援：Pal 引擎、M2 Kaleido 引擎，例如 STEINS;GATE RE:BOOT）。'
+                            '如果遊戲還在啟動，等標題畫面出現後會自動再試。')
 
     @property
     def pid(self):
@@ -249,7 +404,7 @@ class Link:
 
     def current(self):
         if not self.process.alive():
-            raise LinkError('The game closed.')
+            raise LinkError('遊戲已關閉。重開遊戲後會自動重新連上。')
         return self.engine.current()
 
     def close(self):
@@ -259,7 +414,8 @@ class Link:
 def main():
     parser = argparse.ArgumentParser(description='Print the line a running game shows (read-only).')
     parser.add_argument('--pid', type=int)
-    parser.add_argument('--process', default='totsulover.exe')
+    parser.add_argument('--process', help='executable name (default: the first running supported game)')
+    parser.add_argument('--script', help='a 台本 script.json: also print the Japanese of each line')
     parser.add_argument('--seconds', type=float, default=0, help='stop after this many seconds (0 = until Ctrl+C)')
     parser.add_argument('--log', help='also append lines to this UTF-8 file')
     args = parser.parse_args()
@@ -272,23 +428,33 @@ def main():
         if log:
             log.write(text + '\n'); log.flush()
 
-    pid = args.pid or next((p for p, name in processes() if name.lower() == args.process.lower()), None)
+    rows = {}
+    if args.script:
+        data = json.loads(open(args.script, encoding='utf-8-sig').read())
+        rows = {f"{r.get('source', '')}|{r.get('id', '')}": r for r in (data['rows'] if isinstance(data, dict) else data)}
+    known = {exe for engine in ENGINES for exe in engine.exes}
+    running = processes()
+    wanted = args.process.lower() if args.process else None
+    pid, exe = args.pid, args.process or ''
     if not pid:
-        say(f'找不到 {args.process}：請先開遊戲。')
+        pid, exe = next(((p, name) for p, name in running if (name.lower() == wanted if wanted else name.lower() in known)),
+                        (None, exe))
+    if not pid:
+        say(f'找不到 {args.process or "支援的遊戲"}：請先開遊戲。')
         return 1
     started = time.monotonic()
-    link = Link(pid)
-    say(f'已連上 pid {pid}（{link.engine.name} 引擎）context=0x{link.engine.context:08X} TEXT=0x{link.engine.text:08X} '
-        f'size={link.engine.size} lines={link.engine.count}  花 {time.monotonic() - started:.1f} 秒')
+    link = Link(pid, exe)
+    say(f'已連上 pid {pid}（{link.engine.name} 引擎）{link.engine.describe()}  花 {time.monotonic() - started:.1f} 秒')
     last = None
     try:
         while not args.seconds or time.monotonic() - started < args.seconds:
             line = link.current()
-            key = line and line['number']
+            key = line and line['key']
             if key != last:
                 last = key
                 if line:
-                    say(f"#{line['number']}  [{line['speaker'] or '旁白'}]  {line['text']}".replace('\n', ' / '))
+                    text = line['text'] or rows.get(key, {}).get('ja', '（台本裡沒有這句）' if rows else '')
+                    say(f"{line['label']}  [{line['speaker'] or '旁白'}]  {text}".replace('\n', ' / '))
             time.sleep(0.1)
     except LinkError as error:
         say(str(error))

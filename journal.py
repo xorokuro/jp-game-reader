@@ -348,8 +348,9 @@ def main():
     web_queue=deepl_web.Queue(journal)
 
     def script_row_for(line):
-        """The 台本 row for a game line: same line number, and the same Japanese (guards against the wrong script)."""
-        key='main|%d'%line['number'];wanted=sentence_key(line['text'])
+        """The 台本 row for a game line: the row key the engine reports (source|id), and the same Japanese when the
+        engine also reports the text (guards against the wrong script)."""
+        key=line.get('key') or 'main|%d'%line['number'];wanted=sentence_key(line.get('text') or '')
         active=library.scripts.get(script_state.get('active') or '')
         for script in [active]+[s for s in list(library.scripts.values()) if s is not active]:
             if script is None:continue
@@ -385,7 +386,7 @@ def main():
                     if link is None or not link.alive():
                         with lock:state['status']='正在連接遊戲…'
                         for old in game_links.values():old.close()
-                        game_links.clear();link=game_links[pid]=game_link.Link(pid)
+                        game_links.clear();link=game_links[pid]=game_link.Link(pid,cfg.get('window_process',''))
                     with lock:state['status']=f'已連上遊戲（{link.engine.name} 引擎）· 等待台詞…'
                 line=link.current()
             except (game_link.LinkError,OSError) as e:
@@ -393,20 +394,25 @@ def main():
                 game_links.clear();link=None;last=None
                 with lock:state.update(status='遊戲連動：'+str(e),game_line=None)
                 restart.wait(2);continue
-            if line and (line['number']!=last or resync):
-                last=line['number']
+            ident=line and (line.get('key') or line['number'])
+            if line and (ident!=last or resync):
+                last=ident
                 found=script_row_for(line)
+                text=found[1]['ja'] if found else line.get('text') or ''
                 try:
                     if found:
                         script,row=found
-                        result=journal.record(row['ja'],cfg['process'],script.id+'::'+row['key'],1.0,'corpus',line['text'])
+                        result=journal.record(row['ja'],cfg['process'],script.id+'::'+row['key'],1.0,'corpus',line.get('text') or row['ja'])
                         result=attach_translation(journal,result,row)
+                    elif text:
+                        result=journal.record(text,cfg['process'],None,0,'game',text)
                     else:
-                        result=journal.record(line['text'],cfg['process'],None,0,'game',line['text'])
+                        result=None   # the engine reports only where the line is, and no loaded 台本 has it
                 except ValueError:
                     # Punctuation-only lines (「……」) cannot be saved, but the card should still match the game.
                     journal.temporary_id-=1
-                    result=dict(id=journal.temporary_id,japanese=line['text'],original=line['text'],kind='game',game=cfg['process'],source_id=None,confidence=0,english='',traditional_chinese='',note='',starred=0,studied=0,encounters=1,first_seen='',last_seen='',temporary=True)
+                    row=found[1] if found else {}
+                    result=dict(id=journal.temporary_id,japanese=text,original=text,kind='corpus' if found else 'game',game=cfg['process'],source_id=found[0].id+'::'+row['key'] if found else None,confidence=1.0 if found else 0,english=row.get('en',''),traditional_chinese=row.get('zh',''),note='',starred=0,studied=0,encounters=1,first_seen='',last_seen='',temporary=True)
                     journal.temporary[result['id']]=result
                     if len(journal.temporary)>100:journal.temporary.pop(next(iter(journal.temporary)))
                 except (sqlite3.Error,OSError) as e:
@@ -414,9 +420,9 @@ def main():
                     last=None;restart.wait(1);continue
                 with lock:
                     if result:state.update(last=result,version=state['version']+1)
-                    state['raw']=line['text']
-                    state['status']=f"遊戲連動 · #{line['number']}"+(f" · 《{found[0].title}》" if found else ' · 台本裡沒有這句')
-                    state['game_line']=line['number']   # the reading card may show this line right away (see app.js startupBlank)
+                    state['raw']=text
+                    state['status']=f"遊戲連動 · {line.get('label') or '#%d'%line['number']}"+(f" · 《{found[0].title}》" if found else ' · 台本裡沒有這句')
+                    state['game_line']=ident   # the reading card may show this line right away (see app.js startupBlank)
             restart.wait(.12)
         with lock:state['game_line']=None
 
