@@ -47,6 +47,25 @@ position. The tab includes a downloadable example; see the complete
 [script format and import guide](SCRIPT-FORMAT.md) for required fields,
 translations, chapters, limits, local storage and OCR matching.
 
+## Game link · 遊戲連動 (no OCR)
+
+For supported games the reader can follow the line on screen directly instead of
+using OCR. In **Read from**, choose **Game link · 直接讀遊戲台詞**, pick the game's
+window and press **Use this source**. Each time the game shows a new line, the
+reading card shows the same line from that game's 台本 (Japanese plus its
+translations), and the 台本 tab scrolls along while it is open.
+
+- Read-only: `game_link.py` opens the game process with query and read rights and
+  uses ReadProcessMemory. It never writes to, injects into or pauses the game.
+- It needs the game's extracted 台本 with the engine's own line numbers as row
+  `id`s (source `main`). Lines missing from the 台本 are still shown, without a
+  translation.
+- Supported engine: Pal (`dll\Pal.dll`). Tested on Windows with
+  ディメンション凸ラバース!!. Other engines need their own adapter in `game_link.py`.
+- The dialogue box does not need to be visible, and the game can stay fullscreen.
+  If the game restarts, the link reconnects to the same executable on its own.
+- Diagnostic: `python game_link.py` prints each new line while you play.
+
 ## Translation engines
 
 Open **Translation engine · 翻譯引擎**, choose an engine and model/package, then

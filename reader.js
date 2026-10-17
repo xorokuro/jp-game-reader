@@ -96,7 +96,7 @@
 (() => {
   const bar=E('div');bar.className='toolbar input-source';
   const label=E('label','Read from '),mode=E('select');mode.id='input-source';mode.setAttribute('aria-label','Reading input');
-  for(const [value,text] of [['paste','Pasted text'],['obs','OBS projector'],['window','Game window']]){const option=E('option',text);option.value=value;mode.append(option);}
+  for(const [value,text] of [['paste','Pasted text'],['obs','OBS projector'],['window','Game window'],['game','Game link · 直接讀遊戲台詞']]){const option=E('option',text);option.value=value;mode.append(option);}
   label.append(mode);
   const windows=E('select');windows.id='capture-window';windows.setAttribute('aria-label','Game window');
   const refresh=E('button','Refresh windows'),apply=E('button','Use this source'),hint=E('p');hint.className='muted';hint.setAttribute('role','status');
@@ -104,21 +104,23 @@
   bar.append(label,windows,refresh,apply);document.querySelector('.panel-status').prepend(bar,hint);
   let targets=[],activeMode='paste';
   function showSource(){
-    windows.hidden=refresh.hidden=mode.value!=='window';
-    hint.textContent=mode.value==='paste'?'Paste, read and look up words without OBS or a running game.':mode.value==='obs'?'Keep the OBS projector visible. Capture uses OCR; it does not read game memory.':'Choose a visible game window. Keep its dialogue uncovered. Use OBS if the game cannot be captured directly.';
+    windows.hidden=refresh.hidden=mode.value!=='window'&&mode.value!=='game';
+    hint.textContent=mode.value==='paste'?'Paste, read and look up words without OBS or a running game.':mode.value==='obs'?'Keep the OBS projector visible. Capture uses OCR; it does not read game memory.':mode.value==='game'?'遊戲連動：直接讀取遊戲目前顯示的台詞編號（唯讀，不用 OCR，對話框被擋住也沒關係），再顯示台本裡同一句的日文＋譯文。選遊戲視窗後按 Use this source。目前支援 Pal 引擎遊戲（例：ディメンション凸ラバース!!）。':'Choose a visible game window. Keep its dialogue uncovered. Use OBS if the game cannot be captured directly.';
   }
   function applyMode(value){
     activeMode=value;document.body.dataset.inputMode=value;
-    for(const id of ['pause','retry-ocr','retry-full-ocr','obs-settings','obs-batch'])if($(id))$(id).hidden=value==='paste';
+    for(const id of ['pause','retry-ocr','retry-full-ocr','obs-settings','obs-batch'])if($(id))$(id).hidden=value==='paste'||value==='game'&&['retry-ocr','retry-full-ocr','obs-settings'].includes(id);
   }
   async function listWindows(selected){
     const result=await api('capture-sources');targets=result.windows;windows.replaceChildren();
     for(const row of targets){const option=E('option',row.process+' · '+row.title);option.value=String(row.handle);windows.append(option);}
     if(selected&&targets.some(row=>row.handle===selected))windows.value=String(selected);
+    // Game link: preselect a window whose title matches a loaded 台本 (e.g. ディメンション凸ラバース!!).
+    else if(mode.value==='game'){try{const titles=(await api('script/list')).scripts.map(s=>s.title.normalize('NFKC').replace(/\s+/g,''));const hit=targets.find(row=>titles.some(t=>t.length>1&&row.title.normalize('NFKC').replace(/\s+/g,'').includes(t)));if(hit)windows.value=String(hit.handle);}catch{}}
     if(!targets.length){const option=E('option','No visible windows — open the game and refresh');option.value='';windows.append(option);}
   }
   refresh.onclick=()=>action(()=>listWindows(Number(windows.value)));
-  mode.onchange=()=>{showSource();if(mode.value==='window')action(()=>listWindows());};
+  mode.onchange=()=>{showSource();if(mode.value==='window'||mode.value==='game')action(()=>listWindows());};
   apply.onclick=()=>action(async()=>{
     apply.disabled=true;
     try{
@@ -126,11 +128,11 @@
       const result=await api('capture-source',{mode:mode.value,handle:target?.handle,pid:target?.pid});
       const saving=await api('save-text',{enabled:result.settings.capture_mode!=='paste'});
       $('capture-auto-save').checked=saving.enabled;
-      paused=true;applyMode(result.settings.capture_mode);showSource();
-      hint.textContent=activeMode==='paste'?'Ready for pasted text. Capture is paused.':'Source selected. Press Recognize when ready, or enable automatic recognition.';
+      paused=result.paused!==false;applyMode(result.settings.capture_mode);showSource();
+      hint.textContent=activeMode==='paste'?'Ready for pasted text. Capture is paused.':activeMode==='game'?'已選擇遊戲：開始跟隨。遊戲每換一句，這裡就顯示同一句的日文＋中文。':'Source selected. Press Recognize when ready, or enable automatic recognition.';
     }finally{apply.disabled=false;}
   });
-  api('state').then(async state=>{mode.value=state.settings.capture_mode||'paste';applyMode(mode.value);showSource();if(mode.value==='window')await listWindows(state.settings.window_handle);}).catch(error=>hint.textContent=error.message);
+  api('state').then(async state=>{mode.value=state.settings.capture_mode||'paste';applyMode(mode.value);showSource();if(mode.value==='window'||mode.value==='game')await listWindows(state.settings.window_handle);}).catch(error=>hint.textContent=error.message);
 })();
 
 // Reading first: reader and dictionary side by side, setup tiles below.

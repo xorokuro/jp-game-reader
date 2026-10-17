@@ -302,6 +302,14 @@ class Library:
         for script in self.scripts.values():
             if script.id and (script.id in wanted or wanted and wanted in script.id):
                 return script
+        # Japanese window titles have no ASCII to compare: match the script's game title instead.
+        def plain(text):
+            return re.sub(r'\s+', '', unicodedata.normalize('NFKC', text or '').casefold())
+        wanted = plain(title)
+        for script in self.scripts.values():
+            name = plain(script.title)
+            if wanted and len(name) >= 2 and (name in wanted or wanted in name):
+                return script
         return None
 
     def locate(self, key):

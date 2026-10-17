@@ -276,7 +276,34 @@
  window.addEventListener('reader-current',e=>{
   const key=e.detail?.source_id||'';back.hidden=!(key.includes('|')&&scripts.length);back.dataset.key=key;
   back.innerHTML=icon('book')+'<span>在台本中查看前後文</span>';
+  followGame(key);
  });
+ // Game link: while the 台本 tab is open and the reading card follows the game, keep the list on the current line.
+ let followed='';
+ async function followGame(key){
+  if(document.body.dataset.inputMode!=='game'||!following||panel.dataset.view!=='script'||!key.includes('::')||key===followed)return;
+  followed=key;
+  const at=await api('script/locate?'+new URLSearchParams({key})).catch(()=>null);
+  if(!at||key!==followed)return;
+  const row=()=>list.querySelector(`[data-n="${at.n}"]`);
+  if(at.script!==script){rememberPosition();script=at.script;pick.value=script;store.set('jp-reader-script-id',script);drawKinds();}
+  else if(row())return centerLine(row());
+  await context(at.n);
+  if(key===followed&&row())centerLine(row());
+ }
+ // Opening the 台本 tab while the game link runs jumps straight to the line on screen.
+ scriptTab.addEventListener('click',()=>{followed='';followGame(back.dataset.key||'');});
+ function centerLine(target){
+  mark(target);
+  // Center the line inside the list. Smooth scrolling stalls while the tab is hidden, so jump then.
+  const behavior=document.hidden?'auto':'smooth',lr=list.getBoundingClientRect(),tr=target.getBoundingClientRect();
+  const from=list.scrollTop,top=Math.max(0,Math.min(list.scrollHeight-list.clientHeight,from+tr.top-lr.top-(list.clientHeight-tr.height)/2));
+  if(Math.abs(top-from)>1)list.scrollTo({top,behavior});
+  // Narrow layouts scroll the page as well: move it only when the line would land off screen.
+  const y=tr.top-(top-from),head=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--topbar-h'))||64;
+  const nudge=y<head+8?y-head-8:y+tr.height>innerHeight-8?y+tr.height-innerHeight+8:0;
+  if(nudge)window.scrollBy({top:nudge,behavior});
+ }
 
  async function loadList(preferred){
   try{

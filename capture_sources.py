@@ -41,11 +41,12 @@ def windows():
 
 def select(body,available=None):
     mode=body.get('mode')
-    if mode not in ('paste','obs','window'):raise ValueError('Choose Paste text, OBS projector, or Game window.')
-    result={'capture_mode':mode,'window_handle':0,'window_pid':0,'window_title':''}
-    if mode=='window':
+    if mode not in ('paste','obs','window','game'):raise ValueError('Choose Pasted text, OBS projector, Game window, or Game link.')
+    result={'capture_mode':mode,'window_handle':0,'window_pid':0,'window_title':'','window_process':''}
+    if mode in ('window','game'):
         rows=windows() if available is None else available
         row=next((row for row in rows if row['handle']==body.get('handle') and row['pid']==body.get('pid')),None)
         if row is None:raise ValueError('That window closed. Refresh the list and select it again.')
-        result.update(window_handle=row['handle'],window_pid=row['pid'],window_title=row['title'])
+        # Game link reads the game's memory (read-only); the executable name lets it reconnect after a restart.
+        result.update(window_handle=row['handle'],window_pid=row['pid'],window_title=row['title'],window_process=row['process'])
     return result

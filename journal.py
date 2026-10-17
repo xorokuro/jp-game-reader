@@ -327,7 +327,7 @@ def main():
     if config_path.exists():settings.update(json.loads(config_path.read_text(encoding='utf-8')))
     settings.setdefault('capture_mode','obs' if not args.no_capture else 'paste')
     if args.no_capture:settings['capture_mode']='paste'
-    journal.save_text=settings['capture_mode'] in ('obs','window')
+    journal.save_text=settings['capture_mode'] in ('obs','window','game')
     # Extracted game scripts: readable/searchable in the 台本 tab, and used to correct OCR.
     library=script_library.Library(Path(args.database).parent/'scripts');recorder=Recorder(journal,Matcher([]))
     script_state={'mode':settings.get('script_match','auto'),'active':None,'title':'','status':'Loading scripts…'}
@@ -347,6 +347,79 @@ def main():
     import deepl_web
     web_queue=deepl_web.Queue(journal)
 
+    def script_row_for(line):
+        """The 台本 row for a game line: same line number, and the same Japanese (guards against the wrong script)."""
+        key='main|%d'%line['number'];wanted=sentence_key(line['text'])
+        active=library.scripts.get(script_state.get('active') or '')
+        for script in [active]+[s for s in list(library.scripts.values()) if s is not active]:
+            if script is None:continue
+            n=script.load().by_key.get(key)
+            if n and (not wanted or sentence_key(script.rows[n-1]['ja'])==wanted):return script,script.rows[n-1]
+        return None
+
+    def game_pid(cfg):
+        import game_link
+        alive={pid:name for pid,name in game_link.processes()}
+        wanted=cfg.get('window_process','').lower()
+        if cfg.get('window_pid') in alive and (not wanted or alive[cfg['window_pid']].lower()==wanted):return cfg['window_pid']
+        # The game was restarted: follow the same executable.
+        pid=next((pid for pid,name in alive.items() if wanted and name.lower()==wanted),None)
+        if pid is None:raise game_link.LinkError('找不到遊戲。請先開遊戲（重開遊戲後會自動重新連上）。')
+        return pid
+
+    game_links={}   # pid -> attached Link, kept across pause/restart so we do not rescan memory each time
+
+    def follow_game(cfg):
+        """Game link: read the line on screen from the game's memory (read-only) and show that 台本 line. No OCR."""
+        import game_link
+        link=None;last=None
+        while not stop.is_set() and not restart.is_set():
+            with lock:
+                paused=state['paused'];resync=state.pop('game_resync',False)
+                if paused:state.update(status='遊戲連動已暫停。按「開始跟隨遊戲」繼續。',game_line=None)
+            if paused:
+                last=None;restart.wait(.5);continue
+            try:
+                if link is None:
+                    pid=game_pid(cfg);link=game_links.get(pid)
+                    if link is None or not link.alive():
+                        with lock:state['status']='正在連接遊戲…'
+                        for old in game_links.values():old.close()
+                        game_links.clear();link=game_links[pid]=game_link.Link(pid)
+                    with lock:state['status']=f'已連上遊戲（{link.engine.name} 引擎）· 等待台詞…'
+                line=link.current()
+            except (game_link.LinkError,OSError) as e:
+                for old in game_links.values():old.close()
+                game_links.clear();link=None;last=None
+                with lock:state.update(status='遊戲連動：'+str(e),game_line=None)
+                restart.wait(2);continue
+            if line and (line['number']!=last or resync):
+                last=line['number']
+                found=script_row_for(line)
+                try:
+                    if found:
+                        script,row=found
+                        result=journal.record(row['ja'],cfg['process'],script.id+'::'+row['key'],1.0,'corpus',line['text'])
+                        result=attach_translation(journal,result,row)
+                    else:
+                        result=journal.record(line['text'],cfg['process'],None,0,'game',line['text'])
+                except ValueError:
+                    # Punctuation-only lines (「……」) cannot be saved, but the card should still match the game.
+                    journal.temporary_id-=1
+                    result=dict(id=journal.temporary_id,japanese=line['text'],original=line['text'],kind='game',game=cfg['process'],source_id=None,confidence=0,english='',traditional_chinese='',note='',starred=0,studied=0,encounters=1,first_seen='',last_seen='',temporary=True)
+                    journal.temporary[result['id']]=result
+                    if len(journal.temporary)>100:journal.temporary.pop(next(iter(journal.temporary)))
+                except (sqlite3.Error,OSError) as e:
+                    with lock:state['status']='儲存失敗，下一句會再試：'+str(e)
+                    last=None;restart.wait(1);continue
+                with lock:
+                    if result:state.update(last=result,version=state['version']+1)
+                    state['raw']=line['text']
+                    state['status']=f"遊戲連動 · #{line['number']}"+(f" · 《{found[0].title}》" if found else ' · 台本裡沒有這句')
+                    state['game_line']=line['number']   # the reading card may show this line right away (see app.js startupBlank)
+            restart.wait(.12)
+        with lock:state['game_line']=None
+
     def capture():
         while not stop.is_set():
             restart.clear()
@@ -354,10 +427,13 @@ def main():
                 cfg=dict(settings)
                 full_frame=bool(state['retry']['pending'] and state['retry'].get('full_frame'))
                 if full_frame:cfg.update(crop_top=0,crop_height=1)
-                should_capture=settings['capture_mode']!='paste' and (not state['paused'] or state['retry']['pending'])
+                should_capture=settings['capture_mode']=='game' or settings['capture_mode']!='paste' and (not state['paused'] or state['retry']['pending'])
                 if not should_capture:state['status']='Paste Japanese to read and look up words.' if settings['capture_mode']=='paste' else '手動辨識：等待按下辨識按鈕。'
             if not should_capture:
                 restart.wait(.5)
+                continue
+            if cfg['capture_mode']=='game':
+                follow_game(cfg)
                 continue
             cmd=['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',str(HERE/'ocr.ps1'),'-ProcessName',cfg['process'],'-CropTop',str(cfg['crop_top']),'-CropHeight',str(cfg['crop_height'])]
             cmd+=['-CaptureMode',cfg['capture_mode'],'-WindowHandle',str(cfg.get('window_handle',0)),'-WindowProcessId',str(cfg.get('window_pid',0))]
@@ -516,14 +592,15 @@ def main():
                     selected=capture_sources.select(body)
                     with lock:
                         settings.update(selected)
-                        journal.save_text=selected['capture_mode'] in ('obs','window')
+                        journal.save_text=selected['capture_mode'] in ('obs','window','game')
                         config_path.write_text(json.dumps(settings,indent=2),encoding='utf-8')
-                        state['paused']=True;state['retry']={'pending':False,'message':''};state['raw']=''
+                        # Game link follows the game right away; OCR sources start in manual mode.
+                        state['paused']=selected['capture_mode']!='game';state['retry']={'pending':False,'message':''};state['raw']=''
                         recorder.candidate='';recorder.last='';recorder.repeats=0
                         restart.set()
                         if worker[0] and worker[0].poll() is None:worker[0].terminate()
                     if settings.get('script_match','auto')=='auto':threading.Thread(target=choose_matcher,daemon=True).start()
-                    return self.send({'ok':True,'settings':settings})
+                    return self.send({'ok':True,'settings':settings,'paused':state['paused']})
                 elif self.path=='/api/save-text':
                     if not isinstance(body.get('enabled'),bool):raise ValueError('Expected enabled true or false.')
                     with lock:journal.save_text=body['enabled']
@@ -568,6 +645,10 @@ def main():
                 elif self.path=='/api/retry':
                     with lock:
                         if settings['capture_mode']=='paste':raise ValueError('Choose OBS or a game window before recognizing.')
+                        if settings['capture_mode']=='game':
+                            # Nothing to recognize: show the game's current line again (e.g. after browsing the journal).
+                            state['game_resync']=True
+                            return self.send({'ok':True,'retry':{'pending':False,'full_frame':False,'message':'已重新讀取遊戲目前這句。'}})
                         if not state['retry']['pending']:
                             full_frame=body.get('full_frame') is True
                             state['retry']={'pending':True,'full_frame':full_frame,'deadline':time.monotonic()+25,'message':('正在辨識整個 OBS 遊戲畫面；請保持投影視窗完整可見。完成後自動恢復原本範圍。' if full_frame else '正在重新擷取遊戲畫面；若讀不到，請切回遊戲並停留幾秒。'),'text':''}
