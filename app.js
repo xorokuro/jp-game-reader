@@ -384,8 +384,9 @@ function showOCRReview(data){
 
 async function poll(){
  if(stopped)return;
+ let reached=false;
  try{
-  const s=await api('state');showOCRReview(s.pending_ocr);
+  const s=await api('state');reached=true;showOCRReview(s.pending_ocr);
   $('retry-ocr').disabled=!!s.retry?.pending;
   fullScreenOcr.disabled=!!s.retry?.pending;
   $('retry-message').textContent=s.retry?.message||'';showOcrProgress(s.retry);showPendingChip(s.pending_ocr);
@@ -424,7 +425,7 @@ async function poll(){
    updateNavigation();
    if(s.version!==version){await loadPage();if(!dirty())version=s.version;}
   }
- }catch(e){$('status').textContent='連不到 Reader 程式（它的黑色視窗可能被關掉了）：請雙擊 Start Reader.cmd，再按 F5。';}
+ }catch(e){$('status').textContent=reached?'畫面更新出錯，會自動再試：'+e.message:'連不到 Reader 程式（它的黑色視窗可能被關掉了）：請雙擊 Start Reader.cmd，再按 F5。';}
  finally{if(!stopped)setTimeout(poll,document.body.dataset.inputMode==='game'&&!paused?400:1500);}
 }
 $('editcurrent').onclick=()=>action(async()=>{

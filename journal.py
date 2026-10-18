@@ -451,7 +451,13 @@ def main():
                 restart.wait(.5)
                 continue
             if cfg['capture_mode']=='game':
-                follow_game(cfg)
+                try:follow_game(cfg)
+                except Exception as e:
+                    # One unexpected read must not stop the game link for good: show it, reattach and carry on.
+                    for old in game_links.values():old.close()
+                    game_links.clear()
+                    with lock:state.update(status='遊戲連動出錯，2 秒後自動重試：'+str(e)[:200],game_line=None)
+                    restart.wait(2)
                 continue
             cmd=['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass','-File',str(HERE/'ocr.ps1'),'-ProcessName',cfg['process'],'-CropTop',str(cfg['crop_top']),'-CropHeight',str(cfg['crop_height'])]
             cmd+=['-CaptureMode',cfg['capture_mode'],'-WindowHandle',str(cfg.get('window_handle',0)),'-WindowProcessId',str(cfg.get('window_pid',0))]
