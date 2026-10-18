@@ -1,5 +1,5 @@
 'use strict';const $=id=>document.getElementById(id);let rows=[],filtered=[],page=0,version=-1,paused=true,settingsLoaded=false,selected=new Set(),stopped=false,translationFields=false,currentId=null;
-let total=0,resultCount=0,loadToken=0,currentRecord=null,liveRecord=null,following=true,navSeq=null,recent=[];const selectionCache=new Map();
+let total=0,resultCount=0,loadToken=0,currentRecord=null,liveRecord=null,following=true,navSeq=null,recent=[],lastGameLine;const selectionCache=new Map();
 let fullFrameRetryToken=null;
 let startupBlank=true,startupLastSignature;
 try{sessionStorage.removeItem('fullFrameRetryToken');sessionStorage.removeItem('journalPin');}catch(_){}
@@ -402,6 +402,15 @@ async function poll(){
   if(startupLastSignature===undefined)startupLastSignature=lastSignature;
   else if(lastSignature!==startupLastSignature)startupBlank=false;
   if(gameLink&&s.game_line&&!currentId)startupBlank=false;   // game link: the live line is what is on screen right now
+  // Game link: the game moving to another line means the player has moved on, so the card follows the game
+  // again, even if it was showing an older sentence or a word in it was still selected (the dictionary keeps
+  // its entry). Unsaved edits are never replaced.
+  const gameMoved=gameLink&&!!s.game_line&&lastGameLine!==undefined&&s.game_line!==lastGameLine;
+  if(gameLink&&s.game_line)lastGameLine=s.game_line;
+  if(gameMoved&&!dirty()){
+   if(readerSelectionActive()){window.getSelection()?.removeAllRanges();if(document.activeElement===$('latest'))$('latest').blur();}
+   if(!following){following=true;navSeq=null;rememberPin();}
+  }
   if(!dirty()&&!readerSelectionActive()){
    if(fullFrameRetryToken!==null&&!s.retry?.pending){
     if(s.retry?.deadline===fullFrameRetryToken&&s.retry.result_id){
@@ -415,7 +424,7 @@ async function poll(){
    updateNavigation();
    if(s.version!==version){await loadPage();if(!dirty())version=s.version;}
   }
- }catch(e){$('status').textContent='日誌連線中斷，請開啟 Start Sentence Journal.cmd。';}
+ }catch(e){$('status').textContent='連不到 Reader 程式（它的黑色視窗可能被關掉了）：請雙擊 Start Reader.cmd，再按 F5。';}
  finally{if(!stopped)setTimeout(poll,document.body.dataset.inputMode==='game'&&!paused?400:1500);}
 }
 $('editcurrent').onclick=()=>action(async()=>{
