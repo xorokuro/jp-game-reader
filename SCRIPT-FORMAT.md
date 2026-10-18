@@ -84,7 +84,7 @@ The following dialogue is an original sample, not an extract from a game.
 | `rows[].source` | No | Chapter, route or original script filename. Defaults to `main`. Used by the path filter. |
 | `rows[].id` | No | Original line ID. Text or integer; defaults to its 1-based array position. |
 | `rows[].kind` | No | `dialogue`, `mail`, `tip`, `ui` or `extra`. Defaults to `dialogue`; use this for narration too. |
-| `rows[].voice` | No | Name of this line's voice clip, without extension (letters, digits, `_`, `-`; e.g. `VO04_0018`). Needs the script-wide `voice` setting below. |
+| `rows[].voice` | No | Name of this line's voice clip, without extension (letters, digits, `_`, `-`; e.g. `VO04_0018`). Several clips heard together (a group line) are joined with `+`, up to 8. Needs the script-wide `voice` setting below. |
 | `voice` | No | Where the clips live: `{"archives": ["voice.pac"], "ext": [".ogg", ".wav"]}`. Archive names are relative to the game folder; see *Voice clips*. |
 
 Each `(source, id)` pair must be unique **within a script**. Neither field may

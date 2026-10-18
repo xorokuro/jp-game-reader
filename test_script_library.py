@@ -115,7 +115,8 @@ class ScriptVoices(unittest.TestCase):
         data = {'game': 'Voices', 'script_id': 'voices', 'rows': [
             {'source': 'main', 'id': '1', 'ja': '一', 'voice': 'VO04_0018'},
             {'source': 'main', 'id': '2', 'ja': '二', 'voice': 'VO09_9999'},
-            {'source': 'main', 'id': '3', 'ja': '三'}]}
+            {'source': 'main', 'id': '3', 'ja': '三'},
+            {'source': 'main', 'id': '4', 'ja': '四', 'voice': 'VO05_0103+VO04_0018'}]}
         if voice_config:
             data['voice'] = {'archives': ['voice.pac']}
         self.library.import_script(data)
@@ -126,7 +127,7 @@ class ScriptVoices(unittest.TestCase):
         self.assertEqual(script.row(1)['voice'], 'VO04_0018')
         self.assertNotIn('voice', script.row(3))
         self.assertTrue(script.info()['voice'])
-        self.assertTrue(self.library.locate('voices::main|1')['voice'])
+        self.assertEqual(self.library.locate('voices::main|1')['voice'], 1)
         self.assertNotIn('voice', self.library.locate('voices::main|3'))
         with self.assertRaisesRegex(ValueError, '遊戲裝在哪裡'):
             script.voice(1)
@@ -140,6 +141,12 @@ class ScriptVoices(unittest.TestCase):
             script.voice(2)
         with self.assertRaisesRegex(ValueError, '沒有語音'):
             script.voice(3)
+        # a group line: several clips heard together
+        self.assertEqual(self.library.locate('voices::main|4')['voice'], 2)
+        self.assertEqual(script.voice(4, 0)[0], b'OggS-second')
+        self.assertEqual(script.voice(4, 1)[0], b'OggS-first')
+        with self.assertRaisesRegex(ValueError, 'No such voice clip'):
+            script.voice(4, 2)
 
     def test_archive_changes_are_picked_up_and_folders_work_too(self):
         script = self.script()

@@ -199,25 +199,29 @@
  // ------------------------------------------------------------- voice
  // Lines with a voice clip get a 🔊 button. The reader reads the clip straight from the game's own
  // archive, so lines far back in the game (beyond its backlog) can be heard again. Click again to stop.
- const voice={audio:null,button:null,url:null};
+ const voice={audios:[],button:null,urls:[]};
  function stopVoice(){
-  if(voice.audio){voice.audio.onended=null;voice.audio.pause();}
-  if(voice.url)URL.revokeObjectURL(voice.url);
+  for(const a of voice.audios){a.onended=null;a.pause();}
+  for(const u of voice.urls)URL.revokeObjectURL(u);
   if(voice.button){voice.button.classList.remove('playing');voice.button.setAttribute('aria-pressed','false');}
-  voice.audio=voice.button=voice.url=null;
+  voice.audios=[];voice.urls=[];voice.button=null;
  }
- async function playVoice(button,query){
+ // parts > 1: a group line (several voices at once, e.g. everyone shouting) plays all its clips together.
+ async function playVoice(button,query,parts=1){
   if(voice.button===button){stopVoice();return;}
   stopVoice();
   voice.button=button;button.classList.add('playing');button.setAttribute('aria-pressed','true');
   try{
-   const r=await fetch('/api/script/voice?'+new URLSearchParams(query));
-   if(!r.ok){let m='播不出語音';try{m=(await r.json()).error||m;}catch{}throw Error(m);}
-   const blob=await r.blob();
+   const blobs=await Promise.all(Array.from({length:Math.max(1,parts|0)},async(_,part)=>{
+    const r=await fetch('/api/script/voice?'+new URLSearchParams({...query,part}));
+    if(!r.ok){let m='播不出語音';try{m=(await r.json()).error||m;}catch{}throw Error(m);}
+    return r.blob();
+   }));
    if(voice.button!==button)return;
-   voice.url=URL.createObjectURL(blob);voice.audio=new Audio(voice.url);
-   voice.audio.onended=()=>{if(voice.button===button)stopVoice();};
-   await voice.audio.play();
+   voice.urls=blobs.map(b=>URL.createObjectURL(b));voice.audios=voice.urls.map(u=>new Audio(u));
+   let left=voice.audios.length;
+   for(const a of voice.audios)a.onended=()=>{if(--left<=0&&voice.button===button)stopVoice();};
+   await Promise.all(voice.audios.map(a=>a.play()));
   }catch(e){
    if(voice.button===button)stopVoice();
    button.parentElement?.querySelector(':scope > .voice-note')?.remove();
@@ -225,10 +229,10 @@
    setTimeout(()=>note.remove(),8000);
   }
  }
- function voiceButton(query,title){
-  const b=E('button');b.type='button';b.className='voice-play';b.innerHTML=icon('speaker');
+ function voiceButton(query,title,parts=1){
+  const b=E('button');b.type='button';b.className='voice-play';b.innerHTML=icon('speaker');b.dataset.parts=String(parts);
   b.title=title||'播放語音（再按一次停止）· Play voice';b.setAttribute('aria-label','播放語音');b.setAttribute('aria-pressed','false');
-  b.onclick=e=>{e.stopPropagation();playVoice(b,typeof query==='function'?query():query);};
+  b.onclick=e=>{e.stopPropagation();playVoice(b,typeof query==='function'?query():query,Number(b.dataset.parts)||1);};
   return b;
  }
  function card(r){
@@ -237,7 +241,7 @@
   const no=E('button','#'+r.n);no.type='button';no.className='line-no';no.title='前後文 · Show in context';no.onclick=()=>context(r.n);
   const kind=E('span',KIND[r.kind]||r.kind);kind.className='kind-chip';
   top.append(no);
-  if(r.voice)top.append(voiceButton({script,n:r.n}));
+  if(r.voice)top.append(voiceButton({script,n:r.n},'',r.voice.split('+').length));
   top.append(kind);
   if(r.speaker){const who=E('span',r.speaker);who.className='speaker';who.lang='ja';top.append(who);}
   const src=E('span',r.source.replace(/^scenario\//,'').replace(/\.ks$/,'').replace(/^config\//,'')+' · '+r.id);src.className='src';top.append(src);
@@ -347,7 +351,7 @@
   voiceKey=key;
   if(!scripts.some(x=>x.voice))return;
   const at=await api('script/locate?'+new URLSearchParams({key})).catch(()=>null);
-  if(key===voiceKey)cardVoice.hidden=!at?.voice;
+  if(key===voiceKey){cardVoice.hidden=!at?.voice;cardVoice.dataset.parts=String(Number(at?.voice)||1);}
  }
  window.addEventListener('reader-current',e=>{
   const key=e.detail?.source_id||'';back.hidden=!(key.includes('|')&&scripts.length);back.dataset.key=key;

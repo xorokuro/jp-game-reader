@@ -45,6 +45,7 @@ MAX_IMPORT_BYTES = 64 * 1024 * 1024
 # voice.json; the game link also fills it in the first time it follows the running game.
 # Archives are read in place (Pal engine .pac, or a plain folder of audio files); nothing is copied.
 VOICE_NAME = re.compile(r'[A-Za-z0-9_\-]{1,64}')
+VOICE_SPEC = re.compile(r'[A-Za-z0-9_\-]{1,64}(?:\+[A-Za-z0-9_\-]{1,64}){0,7}')   # "A+B": clips heard together
 AUDIO_TYPES = {'.ogg': 'audio/ogg', '.opus': 'audio/ogg', '.wav': 'audio/wav', '.mp3': 'audio/mpeg',
                '.m4a': 'audio/mp4', '.flac': 'audio/flac'}
 MAX_CLIP_BYTES = 64 * 1024 * 1024
@@ -211,8 +212,8 @@ def validate_import(data):
         seen.add(key)
         voice = row.get('voice', '')
         if voice:
-            if not isinstance(voice, str) or not VOICE_NAME.fullmatch(voice):
-                raise ValueError(f'Line {n}: voice must be a clip name such as VO04_0018 (letters, digits, _ or -).')
+            if not isinstance(voice, str) or not VOICE_SPEC.fullmatch(voice):
+                raise ValueError(f'Line {n}: voice must be a clip name such as VO04_0018 (letters, digits, _ or -; A+B for clips heard together).')
             out['voice'] = voice
         result.append(out)
     script = {'script_id': identity, 'game': title, 'rows': result}
@@ -284,15 +285,16 @@ class Script:
                     'tips': re.findall(r'<tips,\d+,([^<>]*)>', r.get('ja', '')),
                     '_find': unicodedata.normalize('NFKC', ja + '\n' + en + '\n' + zh + '\n' + r.get('speaker', '')).casefold(),
                 })
-                if isinstance(voice, str) and VOICE_NAME.fullmatch(voice) and self.voice_cfg:
+                if isinstance(voice, str) and VOICE_SPEC.fullmatch(voice) and self.voice_cfg:
                     prepared[-1]['voice'] = voice
             self.rows = prepared
             self.by_key = {r['key']: r['n'] for r in prepared}
             return self
 
     def located(self, n):
-        """Where a line is ({'script', 'n'}), plus 'voice': True when it has a voice clip."""
-        return {'script': self.id, 'n': n, **({'voice': True} if self.rows[n - 1].get('voice') else {})}
+        """Where a line is ({'script', 'n'}), plus 'voice': how many clips it has (clips heard together)."""
+        voice = self.rows[n - 1].get('voice')
+        return {'script': self.id, 'n': n, **({'voice': voice.count('+') + 1} if voice else {})}
 
     def voice_sources(self):
         """Where this computer keeps the voice archives: script.json "voice" + voice.json in this folder."""
@@ -315,15 +317,18 @@ class Script:
             found.append(path)
         return list(dict.fromkeys(found))
 
-    def voice(self, n):
-        """(audio bytes, MIME type) of script line #n's voice clip."""
+    def voice(self, n, part=0):
+        """(audio bytes, MIME type) of script line #n's voice clip (part: which of the clips heard together)."""
         self.load()
         if not 1 <= n <= len(self.rows):
             raise ValueError('No such script line.')
         name = self.rows[n - 1].get('voice')
         if not name:
             raise ValueError('這句沒有語音。')
-        return voice_clip(self.voice_sources(), name, self.voice_cfg.get('ext'))
+        names = name.split('+')
+        if not 0 <= part < len(names):
+            raise ValueError('No such voice clip.')
+        return voice_clip(self.voice_sources(), names[part], self.voice_cfg.get('ext'))
 
     def needs_game_dir(self):
         """True when this script has voices but none of its archives can be found on this computer."""

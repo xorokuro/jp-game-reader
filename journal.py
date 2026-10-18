@@ -571,7 +571,7 @@ def main():
                         if not at:raise ValueError('台本裡沒有這句。')
                         script,n=library.get(at['script']),at['n']
                     else:script,n=library.get(query['script'][0]),int(query['n'][0])
-                    audio,mime=script.voice(n)
+                    audio,mime=script.voice(n,int(query.get('part',['0'])[0]))
                     return self.send(audio,mime=mime)
                 if p=='/api/grammar/list':
                     return self.send({'collections':[c.info() for c in grammar_library.collections()],'root_file':str(HERE/grammar_library.ROOT_FILE)})
