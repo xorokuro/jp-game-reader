@@ -812,3 +812,14 @@ rt,rp{-webkit-user-select:none;user-select:none}
 #reader-workspace section.current[data-view="script"] .card-head>.script-tools-toggle{display:inline-flex!important}
 #reader-workspace section.current[data-view="script"].script-tools-hidden .card-head>.layout-toggle{display:none!important}
 #reader-workspace section.current.script-tools-hidden #script-view>:not(.script-list){display:none!important}
+
+/* 台本 voices: 🔊 on a line (and on the reading card) plays the game's own clip; click again to stop */
+.voice-play{display:inline-flex;align-items:center;justify-content:center;width:30px;height:26px;padding:0;border-radius:999px;flex-shrink:0}
+.voice-play .ico{width:16px;height:16px}
+.voice-play.playing{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 60%,transparent);animation:voice-pulse 1.1s ease-in-out infinite}
+@keyframes voice-pulse{50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 22%,transparent)}}
+@media (prefers-reduced-motion:reduce){.voice-play.playing{animation:none}}
+.voice-note{font-size:12px;color:color-mix(in srgb,#d0453a 75%,var(--ink));max-width:42em}
+.script-link-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px;align-self:flex-start}
+.script-link-row>.script-link{margin:0}
+.script-link-row:not(:has(>:not([hidden]))){display:none}

@@ -50,6 +50,9 @@ if os.name == 'nt':
     _kernel.CloseHandle.argtypes = [wintypes.HANDLE]
     _kernel.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
     _kernel.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    _kernel.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR,
+                                                  ctypes.POINTER(wintypes.DWORD)]
+    _kernel.QueryFullProcessImageNameW.restype = wintypes.BOOL
     _kernel.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
 
     class _MBI(ctypes.Structure):
@@ -120,6 +123,14 @@ class Process:
         if self.handle:
             _kernel.CloseHandle(self.handle)
             self.handle = None
+
+    def image_path(self):
+        """Full path of the game's .exe ('' if Windows does not say)."""
+        size = wintypes.DWORD(32768)
+        buffer = ctypes.create_unicode_buffer(size.value)
+        if self.handle and _kernel.QueryFullProcessImageNameW(self.handle, 0, buffer, ctypes.byref(size)):
+            return buffer.value
+        return ''
 
     def alive(self):
         code = wintypes.DWORD()

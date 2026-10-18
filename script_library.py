@@ -12,6 +12,7 @@ Scripts stay outside Git: they are personal extractions of commercial games.
 """
 import hashlib
 import shutil
+import struct
 import tempfile
 import json
 import os
@@ -36,6 +37,125 @@ def slug(text):
 
 
 MAX_IMPORT_BYTES = 64 * 1024 * 1024
+
+# ------------------------------------------------------------------ voice
+# A row may name its voice clip ("voice": "VO04_0018"). script.json says where the clips live
+# ("voice": {"archives": ["voice.pac"]}, relative to the game folder), and voice.json beside it
+# says where this computer keeps the game ({"game_dir": "C:\\...\\game"}). The installer writes
+# voice.json; the game link also fills it in the first time it follows the running game.
+# Archives are read in place (Pal engine .pac, or a plain folder of audio files); nothing is copied.
+VOICE_NAME = re.compile(r'[A-Za-z0-9_\-]{1,64}')
+AUDIO_TYPES = {'.ogg': 'audio/ogg', '.opus': 'audio/ogg', '.wav': 'audio/wav', '.mp3': 'audio/mpeg',
+               '.m4a': 'audio/mp4', '.flac': 'audio/flac'}
+MAX_CLIP_BYTES = 64 * 1024 * 1024
+
+
+def voice_config(value):
+    """The script-wide voice settings, cleaned: {'archives': [...], 'ext': [...]} or {}."""
+    if not isinstance(value, dict):
+        return {}
+    archives = [a for a in value.get('archives', []) if isinstance(a, str) and 0 < len(a) <= 260][:8] \
+        if isinstance(value.get('archives'), list) else []
+    exts = [e for e in value.get('ext', []) if isinstance(e, str) and e.lower() in AUDIO_TYPES][:6] \
+        if isinstance(value.get('ext'), list) else []
+    return {'archives': archives, 'ext': exts} if archives else {}
+
+
+class PalPac:
+    """Read-only index of a Pal engine .pac archive (name -> offset, size); clips are read on demand.
+
+    "PAC " | 0 | count | 255 x (start, count) name buckets | count x (name[32], size, offset) | data."""
+
+    def __init__(self, path):
+        self.path = Path(path)
+        st = self.path.stat()
+        self.stamp = (st.st_size, st.st_mtime_ns)
+        with open(self.path, 'rb') as f:
+            head = f.read(0x804)
+            if len(head) < 0x804 or head[:4] != b'PAC ':
+                raise ValueError('不是 PAC 封包：' + str(self.path))
+            count = struct.unpack_from('<I', head, 8)[0]
+            if count > 1000000:
+                raise ValueError('PAC 封包的目錄不正確：' + str(self.path))
+            index = f.read(40 * count)
+        if len(index) < 40 * count:
+            raise ValueError('PAC 封包的目錄不完整：' + str(self.path))
+        self.files = {}
+        for i in range(count):
+            name = index[i * 40:i * 40 + 32].split(b'\0')[0].decode('cp932', 'replace').upper()
+            self.files[name] = struct.unpack_from('<II', index, i * 40 + 32)[::-1]   # (offset, size)
+
+    def read(self, name):
+        offset, size = self.files[name.upper()]
+        if size > MAX_CLIP_BYTES:
+            raise ValueError('語音檔太大：' + name)
+        with open(self.path, 'rb') as f:
+            f.seek(offset)
+            data = f.read(size)
+        if len(data) != size:
+            raise ValueError('語音檔讀不完整（遊戲檔案可能損壞）：' + name)
+        return data
+
+
+_archives = {}
+_archives_lock = threading.Lock()
+
+
+def _pac(path):
+    st = path.stat()
+    with _archives_lock:
+        pac = _archives.get(path)
+        if pac is None or pac.stamp != (st.st_size, st.st_mtime_ns):
+            pac = _archives[path] = PalPac(path)
+        return pac
+
+
+def sniff(data):
+    """MIME type from the first bytes of an audio clip stored without a file extension."""
+    return 'audio/ogg' if data[:4] == b'OggS' else 'audio/wav' if data[:4] == b'RIFF' else \
+        'audio/mpeg' if data[:3] == b'ID3' or data[:2] in (b'\xff\xfb', b'\xff\xf3') else 'application/octet-stream'
+
+
+def voice_clip(sources, name, exts=None):
+    """(audio bytes, MIME type) of one voice clip, looked up in the archives in order."""
+    if not isinstance(name, str) or not VOICE_NAME.fullmatch(name):
+        raise ValueError('語音檔名不正確。')
+    exts = list(exts or ['.ogg', '.wav'])
+    if not sources:
+        raise ValueError('還不知道這台電腦的遊戲裝在哪裡，所以找不到語音。'
+                         '開著遊戲、用一次「遊戲連動」就會記住（或重新執行這款遊戲的 install.cmd）。')
+    missing, lacking, failed = [], [], []
+    for source in sources:
+        try:
+            if source.is_dir():
+                for ext in exts + [e.upper() for e in exts]:
+                    clip = source / (name + ext)
+                    if clip.is_file():
+                        if clip.stat().st_size > MAX_CLIP_BYTES:
+                            raise ValueError('語音檔太大：' + name)
+                        return clip.read_bytes(), AUDIO_TYPES[ext.lower()]
+            elif source.is_file():
+                pac = _pac(source)
+                for ext in exts:
+                    if (name + ext).upper() in pac.files:
+                        return pac.read(name + ext), AUDIO_TYPES[ext.lower()]
+                if name.upper() in pac.files:                 # stored without an extension
+                    data = pac.read(name)
+                    return data, sniff(data)
+            else:
+                missing.append(str(source))
+                continue
+            lacking.append(str(source))
+        except OSError as error:
+            failed.append(f'{source}（{error.strerror or error}）')
+        except ValueError as error:
+            failed.append(str(error))
+    if lacking:
+        raise ValueError(f'遊戲的語音檔裡沒有 {name}。')
+    if failed:
+        raise ValueError('讀不到語音檔：' + '、'.join(failed) + '。遊戲正在更新或檔案被鎖住的話，等一下再試。')
+    raise ValueError('找不到語音檔：' + '、'.join(missing) + '。遊戲搬家或重灌的話，開著遊戲用一次「遊戲連動」就會更新位置。')
+
 
 
 def template():
@@ -89,8 +209,16 @@ def validate_import(data):
         if key in seen:
             raise ValueError(f'Line {n}: duplicate source/id pair: {key[0]} | {key[1]}.')
         seen.add(key)
+        voice = row.get('voice', '')
+        if voice:
+            if not isinstance(voice, str) or not VOICE_NAME.fullmatch(voice):
+                raise ValueError(f'Line {n}: voice must be a clip name such as VO04_0018 (letters, digits, _ or -).')
+            out['voice'] = voice
         result.append(out)
-    return {'script_id': identity, 'game': title, 'rows': result}
+    script = {'script_id': identity, 'game': title, 'rows': result}
+    if voice_config(data.get('voice')):
+        script['voice'] = voice_config(data.get('voice'))
+    return script
 
 
 
@@ -132,6 +260,7 @@ class Script:
         self.id = slug(self.folder.parent.name if self.folder.name == 'corpus' else self.folder.name)
         self._notes = ({}, None)
         self._cache = (None, [])
+        self.voice_cfg = {}
 
     def load(self):
         with self.lock:
@@ -139,6 +268,7 @@ class Script:
                 return self
             data = json.loads(self.path.read_text(encoding='utf-8-sig'))
             rows = data['rows'] if isinstance(data, dict) else data
+            self.voice_cfg = voice_config(data.get('voice')) if isinstance(data, dict) else {}
             self.title = (data.get('game') if isinstance(data, dict) else None) or self.title
             self.id = (data.get('script_id') if isinstance(data, dict) else None) or slug(self.title)
             if self.id == 'script':
@@ -146,6 +276,7 @@ class Script:
             prepared = []
             for n, r in enumerate(rows, 1):
                 ja, en, zh = clean(r.get('ja', '')), clean(r.get('en', '')), clean(r.get('zh', ''))
+                voice = r.get('voice')
                 prepared.append({
                     'n': n, 'key': f"{r.get('source', '')}|{r.get('id', '')}",
                     'source': r.get('source', ''), 'id': r.get('id', ''), 'kind': r.get('kind', ''),
@@ -153,9 +284,63 @@ class Script:
                     'tips': re.findall(r'<tips,\d+,([^<>]*)>', r.get('ja', '')),
                     '_find': unicodedata.normalize('NFKC', ja + '\n' + en + '\n' + zh + '\n' + r.get('speaker', '')).casefold(),
                 })
+                if isinstance(voice, str) and VOICE_NAME.fullmatch(voice) and self.voice_cfg:
+                    prepared[-1]['voice'] = voice
             self.rows = prepared
             self.by_key = {r['key']: r['n'] for r in prepared}
             return self
+
+    def located(self, n):
+        """Where a line is ({'script', 'n'}), plus 'voice': True when it has a voice clip."""
+        return {'script': self.id, 'n': n, **({'voice': True} if self.rows[n - 1].get('voice') else {})}
+
+    def voice_sources(self):
+        """Where this computer keeps the voice archives: script.json "voice" + voice.json in this folder."""
+        try:
+            local = json.loads((self.folder / 'voice.json').read_text(encoding='utf-8-sig'))
+        except (OSError, ValueError):
+            local = {}
+        if not isinstance(local, dict):
+            local = {}
+        game = local.get('game_dir') if isinstance(local.get('game_dir'), str) else ''
+        found = []
+        for item in [a for a in local.get('archives', []) if isinstance(a, str)] if isinstance(local.get('archives'), list) else []:
+            found.append(Path(item))
+        for item in self.voice_cfg.get('archives', []):
+            path = Path(item)
+            if not path.is_absolute():
+                if not game:
+                    continue
+                path = Path(game) / path
+            found.append(path)
+        return list(dict.fromkeys(found))
+
+    def voice(self, n):
+        """(audio bytes, MIME type) of script line #n's voice clip."""
+        self.load()
+        if not 1 <= n <= len(self.rows):
+            raise ValueError('No such script line.')
+        name = self.rows[n - 1].get('voice')
+        if not name:
+            raise ValueError('這句沒有語音。')
+        return voice_clip(self.voice_sources(), name, self.voice_cfg.get('ext'))
+
+    def needs_game_dir(self):
+        """True when this script has voices but none of its archives can be found on this computer."""
+        self.load()
+        return bool(self.voice_cfg) and not any(p.exists() for p in self.voice_sources())
+
+    def remember_game_dir(self, folder):
+        """Save where the game is (from the running game's .exe) if its voice archives are there."""
+        folder = Path(folder)
+        relative = [a for a in self.voice_cfg.get('archives', []) if not Path(a).is_absolute()]
+        if not relative or not any((folder / a).exists() for a in relative):
+            return False
+        target = self.folder / 'voice.json'
+        tmp = target.with_name('voice.json.tmp')
+        tmp.write_text(json.dumps({'game_dir': str(folder)}, ensure_ascii=False, indent=1), encoding='utf-8')
+        os.replace(tmp, target)
+        return True
 
     def notes(self):
         """Annotations are re-read when their file changes (e.g. after a new study batch)."""
@@ -178,7 +363,7 @@ class Script:
         for r in self.rows:
             kinds[r['kind']] = kinds.get(r['kind'], 0) + 1
         return {'id': self.id, 'title': self.title, 'rows': len(self.rows), 'kinds': kinds,
-                'annotated': len(self.notes())}
+                'annotated': len(self.notes()), 'voice': bool(self.voice_cfg)}
 
     def public(self, r, notes):
         row = {k: v for k, v in r.items() if not k.startswith('_')}
@@ -317,9 +502,9 @@ class Library:
             identity, row_key = key.split('::', 1)
             script = self.scripts.get(identity)
             n = script.by_key.get(row_key) if script else None
-            return {'script': identity, 'n': n} if n else None
+            return script.located(n) if n else None
         for script in self.scripts.values():
             n = script.by_key.get(key)
             if n:
-                return {'script': script.id, 'n': n}
+                return script.located(n)
         return None

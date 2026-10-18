@@ -84,6 +84,8 @@ The following dialogue is an original sample, not an extract from a game.
 | `rows[].source` | No | Chapter, route or original script filename. Defaults to `main`. Used by the path filter. |
 | `rows[].id` | No | Original line ID. Text or integer; defaults to its 1-based array position. |
 | `rows[].kind` | No | `dialogue`, `mail`, `tip`, `ui` or `extra`. Defaults to `dialogue`; use this for narration too. |
+| `rows[].voice` | No | Name of this line's voice clip, without extension (letters, digits, `_`, `-`; e.g. `VO04_0018`). Needs the script-wide `voice` setting below. |
+| `voice` | No | Where the clips live: `{"archives": ["voice.pac"], "ext": [".ogg", ".wav"]}`. Archive names are relative to the game folder; see *Voice clips*. |
 
 Each `(source, id)` pair must be unique **within a script**. Neither field may
 contain `|`. Different scripts may reuse chapter names and line IDs: reading
@@ -99,6 +101,24 @@ align separate language files. Unrecognized metadata is ignored by the importer.
 Use visible text rather than HTML or engine control codes. The reader removes
 short angle-bracket engine tags; the legacy `<tips,123,visible word>` form retains
 the visible word. Standard JSON text and line breaks are the recommended format.
+
+## Voice clips / 語音
+
+Lines with `voice` get a 🔊 button in the 台本 tab (and on the reading card when the
+game link shows that line). The reader plays the clip straight from the game's own
+files; nothing is copied into the library and no audio is ever part of a script.
+
+Each entry in `voice.archives` is a Pal engine `.pac` archive or a folder of audio
+files (`.ogg`, `.wav`, `.mp3`, `.m4a`, `.flac`), searched in order. Relative names are
+resolved against the game folder recorded in `voice.json` beside `script.json`:
+
+```json
+{"game_dir": "C:\\Games\\My Novel"}
+```
+
+A game's installer can write this file. Otherwise the game link fills it in the first
+time it follows the running game (from the game's `.exe` folder), and again if the
+game moves. `voice.json` may also list absolute `archives` of its own.
 
 ## Storage and moving to another laptop
 

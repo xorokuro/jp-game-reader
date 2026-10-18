@@ -386,6 +386,17 @@ def main():
             return link
         raise error or game_link.LinkError('等遊戲開啟…遊戲一開就會自動連上（支援：'+game_link.supported_games()+'）。')
 
+    voice_checked=set()
+    def learn_game_dir(script,link):
+        """台本 voices are read from the game's own archive: note where this computer keeps the game (once per run)."""
+        if (script.id,link.pid) in voice_checked:return
+        voice_checked.add((script.id,link.pid))
+        try:
+            if script.needs_game_dir():
+                exe=link.process.image_path()
+                if exe:script.remember_game_dir(Path(exe).parent)
+        except Exception:pass   # voices are optional; never disturb following the game
+
     def follow_game(cfg):
         """Game link: read the line on screen from the game's memory (read-only) and show that 台本 line. No OCR."""
         import game_link
@@ -410,6 +421,7 @@ def main():
             if line and (ident!=last or resync):
                 last=ident
                 found=script_row_for(line)
+                if found:learn_game_dir(found[0],link)
                 text=found[1]['ja'] if found else line.get('text') or ''
                 try:
                     if found:
@@ -552,6 +564,15 @@ def main():
                     return self.send(library.get(query['script'][0]).row(int(query['n'][0])))
                 if p=='/api/script/locate':
                     return self.send(library.locate(query['key'][0]))
+                if p=='/api/script/voice':
+                    # The line's voice clip, read straight from the game's own archive (nothing is copied).
+                    if query.get('key'):
+                        at=library.locate(query['key'][0])
+                        if not at:raise ValueError('台本裡沒有這句。')
+                        script,n=library.get(at['script']),at['n']
+                    else:script,n=library.get(query['script'][0]),int(query['n'][0])
+                    audio,mime=script.voice(n)
+                    return self.send(audio,mime=mime)
                 if p=='/api/grammar/list':
                     return self.send({'collections':[c.info() for c in grammar_library.collections()],'root_file':str(HERE/grammar_library.ROOT_FILE)})
                 if p=='/api/dictionary/catalog':

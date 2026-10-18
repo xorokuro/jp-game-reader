@@ -196,12 +196,49 @@
   const context=[r.en&&'官方英譯（參考，不一定逐字）：'+r.en,r.zh&&'官方繁中譯（參考，不一定逐字）：'+r.zh].filter(Boolean).join('\n');
   return japaneseAnalysisPrompt(r.ja+(r.speaker?'\n（說話者：'+r.speaker+'）':''),true)+(context?'\n\n'+context:'');
  }
+ // ------------------------------------------------------------- voice
+ // Lines with a voice clip get a 🔊 button. The reader reads the clip straight from the game's own
+ // archive, so lines far back in the game (beyond its backlog) can be heard again. Click again to stop.
+ const voice={audio:null,button:null,url:null};
+ function stopVoice(){
+  if(voice.audio){voice.audio.onended=null;voice.audio.pause();}
+  if(voice.url)URL.revokeObjectURL(voice.url);
+  if(voice.button){voice.button.classList.remove('playing');voice.button.setAttribute('aria-pressed','false');}
+  voice.audio=voice.button=voice.url=null;
+ }
+ async function playVoice(button,query){
+  if(voice.button===button){stopVoice();return;}
+  stopVoice();
+  voice.button=button;button.classList.add('playing');button.setAttribute('aria-pressed','true');
+  try{
+   const r=await fetch('/api/script/voice?'+new URLSearchParams(query));
+   if(!r.ok){let m='播不出語音';try{m=(await r.json()).error||m;}catch{}throw Error(m);}
+   const blob=await r.blob();
+   if(voice.button!==button)return;
+   voice.url=URL.createObjectURL(blob);voice.audio=new Audio(voice.url);
+   voice.audio.onended=()=>{if(voice.button===button)stopVoice();};
+   await voice.audio.play();
+  }catch(e){
+   if(voice.button===button)stopVoice();
+   button.parentElement?.querySelector(':scope > .voice-note')?.remove();
+   const note=E('span',e.message);note.className='voice-note';note.setAttribute('role','status');button.after(note);
+   setTimeout(()=>note.remove(),8000);
+  }
+ }
+ function voiceButton(query,title){
+  const b=E('button');b.type='button';b.className='voice-play';b.innerHTML=icon('speaker');
+  b.title=title||'播放語音（再按一次停止）· Play voice';b.setAttribute('aria-label','播放語音');b.setAttribute('aria-pressed','false');
+  b.onclick=e=>{e.stopPropagation();playVoice(b,typeof query==='function'?query():query);};
+  return b;
+ }
  function card(r){
   const el=E('article');el.className='script-line';el.dataset.n=r.n;el.dataset.kind=r.kind;
   const top=E('header');
   const no=E('button','#'+r.n);no.type='button';no.className='line-no';no.title='前後文 · Show in context';no.onclick=()=>context(r.n);
   const kind=E('span',KIND[r.kind]||r.kind);kind.className='kind-chip';
-  top.append(no,kind);
+  top.append(no);
+  if(r.voice)top.append(voiceButton({script,n:r.n}));
+  top.append(kind);
   if(r.speaker){const who=E('span',r.speaker);who.className='speaker';who.lang='ja';top.append(who);}
   const src=E('span',r.source.replace(/^scenario\//,'').replace(/\.ks$/,'').replace(/^config\//,'')+' · '+r.id);src.className='src';top.append(src);
   if(r.annotated){const star=E('span','精讀');star.className='note-badge';star.title='有精讀註解';top.append(star);}
@@ -299,10 +336,23 @@
  // Mark taken over by the reading card: link a script-matched line back to its place in the script.
  const back=E('button');back.type='button';back.className='script-link';back.hidden=true;
  back.onclick=()=>window.readerScript.open(back.dataset.key);
- $('latestmeta').after(back);
+ const cardVoice=voiceButton(()=>({key:back.dataset.key}),'播放這句的語音（再按一次停止）· Play this line');cardVoice.hidden=true;
+ const linkRow=E('div');linkRow.className='script-link-row';linkRow.append(back,cardVoice);
+ $('latestmeta').after(linkRow);
+ let voiceKey='';
+ async function showCardVoice(key){
+  if(key===voiceKey)return;
+  cardVoice.hidden=true;
+  if(!key.includes('::')||!scripts.length)return;   // asked again once the script list has loaded
+  voiceKey=key;
+  if(!scripts.some(x=>x.voice))return;
+  const at=await api('script/locate?'+new URLSearchParams({key})).catch(()=>null);
+  if(key===voiceKey)cardVoice.hidden=!at?.voice;
+ }
  window.addEventListener('reader-current',e=>{
   const key=e.detail?.source_id||'';back.hidden=!(key.includes('|')&&scripts.length);back.dataset.key=key;
   back.innerHTML=icon('book')+'<span>在台本中查看前後文</span>';
+  showCardVoice(key);
   followGame(key);
  });
  // Game link: while the 台本 tab is open and the reading card follows the game, keep the list on the current line.
@@ -334,7 +384,7 @@
 
  async function loadList(preferred){
   try{
-   const data=await api('script/list');scripts=data.scripts||[];
+   const data=await api('script/list');scripts=data.scripts||[];voiceKey='';
    scriptTab.hidden=false;
    pick.replaceChildren(...scripts.map(s=>{const o=E('option',s.title);o.value=s.id;return o;}));pick.hidden=false;pick.disabled=!scripts.length;
    if(!scripts.length){const o=E('option','尚未載入台本');o.value='';pick.append(o);}
