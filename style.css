@@ -799,3 +799,16 @@ section.current[data-view="grammar"] .card-head>:not(.view-tabs){display:none!im
 body.ws-resizing #grammar-frame{pointer-events:none}
 /* Furigana is left out of selections in the reader's own ruby text too. */
 rt,rp{-webkit-user-select:none;user-select:none}
+
+/* 台本 · 收起 / 展開: hide the tools above the list (全寬, search, Load script, Script format, count) to read only the script */
+.card-head>.script-tools-toggle{display:none;align-items:center;gap:6px;padding:6px 11px;font-size:13px;font-weight:650;white-space:nowrap;margin-left:auto}
+.script-tools-toggle .ico{width:18px;height:18px}
+.script-tools-toggle :is(.ico,span){flex-shrink:0}
+.script-tools-toggle small{font-weight:500;color:var(--muted);max-width:10em;min-width:0;overflow:hidden;text-overflow:ellipsis}
+/* Collapsed: keep the tabs and this button on one line; a long search word is shortened instead of wrapping. */
+#reader-workspace section.current[data-view="script"].script-tools-hidden .card-head{flex-wrap:nowrap}
+#reader-workspace section.current[data-view="script"].script-tools-hidden .card-head>.view-tabs{flex-shrink:0}
+#reader-workspace section.current[data-view="script"].script-tools-hidden .card-head>.script-tools-toggle{min-width:0;flex-shrink:1;overflow:hidden}
+#reader-workspace section.current[data-view="script"] .card-head>.script-tools-toggle{display:inline-flex!important}
+#reader-workspace section.current[data-view="script"].script-tools-hidden .card-head>.layout-toggle{display:none!important}
+#reader-workspace section.current.script-tools-hidden #script-view>:not(.script-list){display:none!important}

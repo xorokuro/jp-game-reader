@@ -59,6 +59,32 @@
  const $s=id=>view.querySelector('#'+id);
  const list=$s('script-list'),q=$s('script-q'),pick=$s('script-pick'),count=$s('script-count');
  $s('script-filter-toggle').innerHTML=icon('list');
+ // 收起 / 展開: hide everything above the list (全寬, search, Load script, Script format, the line count)
+ // to read only the script. Remembered until shown again; Ctrl+K shows it again to search.
+ if(window.readerIcons){
+  readerIcons.chevUp=readerIcons.chevUp||'M6.2 14.8c1.9-2 3.9-3.9 5.8-5.9 2 1.9 3.9 3.9 5.8 5.9';
+  readerIcons.chevDown=readerIcons.chevDown||'M6.2 9.2c1.9 2 3.9 3.9 5.8 5.9 2-1.9 3.9-3.9 5.8-5.9';
+ }
+ const TOOLS='jp-reader-script-tools-hidden';
+ const toolsToggle=E('button');toolsToggle.type='button';toolsToggle.className='script-tools-toggle';
+ toolsToggle.setAttribute('aria-controls','script-view');head.append(toolsToggle);
+ const toolsHidden=()=>panel.classList.contains('script-tools-hidden');
+ function paintTools(){
+  const hidden=toolsHidden(),query=q.value.trim();
+  toolsToggle.innerHTML=hidden
+   ?icon('chevDown')+'<span>展開</span>'+(query?`<small lang="ja">「${esc(query.length>8?query.slice(0,8)+'…':query)}」</small>`:'')
+   :icon('chevUp')+'<span>收起</span>';
+  toolsToggle.title=hidden?'顯示搜尋列和工具（全寬、載入台本、台本格式）· Show search and tools'
+   :'收起搜尋列和工具，只看台本（會記住，按「展開」或 Ctrl+K 再打開）· Hide search and tools to read only the script';
+  toolsToggle.setAttribute('aria-expanded',String(!hidden));
+ }
+ function showTools(show){
+  panel.classList.toggle('script-tools-hidden',!show);store.set(TOOLS,!show);paintTools();
+  window.dispatchEvent(new Event('reader-layout'));
+ }
+ toolsToggle.onclick=()=>showTools(toolsHidden());
+ panel.classList.toggle('script-tools-hidden',store.get(TOOLS,false)===true);paintTools();
+ q.addEventListener('input',paintTools);
 
  let scripts=[],script=store.get('jp-reader-script-id',''),kinds=new Set(store.get('jp-reader-script-kinds',['dialogue','mail','tip','ui','extra']));
  const positions=store.get('jp-reader-script-positions',{}),viewOffsets=store.get('jp-reader-script-offsets',{});
@@ -144,6 +170,7 @@
  const observer=new IntersectionObserver(entries=>{for(const e of entries)if(e.isIntersecting)more(e.target===bottomSentinel?1:-1);},{root:list,rootMargin:'600px 0px'});
  observer.observe(topSentinel);observer.observe(bottomSentinel);
  function status(){
+  paintTools();
   const info=scripts.find(s=>s.id===script);
   count.innerHTML=total?`<b>${(start+1).toLocaleString()}–${end.toLocaleString()}</b> / ${total.toLocaleString()} 句${info&&total!==info.rows?` <small>（全 ${info.rows.toLocaleString()}）</small>`:''} · 捲動載入更多`:'沒有符合的台詞';
  }
@@ -267,7 +294,7 @@
  // Ctrl+K jumps to the script search, like the standalone viewer.
  document.addEventListener('keydown',e=>{
   if(scriptTab.hidden||!(e.ctrlKey||e.metaKey)||e.altKey||e.key.toLowerCase()!=='k')return;
-  e.preventDefault();setView('script');q.focus();q.select();
+  e.preventDefault();setView('script');if(toolsHidden())showTools(true);q.focus();q.select();
  });
  // Mark taken over by the reading card: link a script-matched line back to its place in the script.
  const back=E('button');back.type='button';back.className='script-link';back.hidden=true;
