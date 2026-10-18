@@ -50,10 +50,18 @@ translations, chapters, limits, local storage and OCR matching.
 ## Game link · 遊戲連動 (no OCR)
 
 For supported games the reader can follow the line on screen directly instead of
-using OCR. In **Read from**, choose **Game link · 直接讀遊戲台詞**, pick the game's
-window and press **Use this source**. Each time the game shows a new line, the
-reading card shows the same line from that game's 台本 (Japanese plus its
-translations), and the 台本 tab scrolls along while it is open.
+using OCR. In **Read from**, choose **Game link · 直接讀遊戲台詞**, keep
+**自動：找正在玩的遊戲** and press **Use this source** — once. Each time the game shows
+a new line, the reading card shows the same line from that game's 台本 (Japanese plus
+its translations), and the 台本 tab scrolls along while it is open.
+
+- Automatic: the reader finds whichever supported game is running (ディメンション凸ラバース!!,
+  STEINS;GATE RE:BOOT), so one reader follows every game: start, quit or switch games
+  and it follows along. A window picked in the list is tried first; if it is not a
+  game the reader can read, the running supported game is used instead.
+- Game link stays on when the reader restarts (also with plain `Start Reader.cmd`):
+  it only reads the game's memory and takes no screenshots. Choose **Pasted text** to
+  turn it off. OBS and game-window OCR still start off unless you use `--obs`.
 
 - Read-only: `game_link.py` opens the game process with query and read rights and
   uses ReadProcessMemory. It never writes to, injects into or pauses the game.
@@ -69,7 +77,7 @@ translations), and the 台本 tab scrolls along while it is open.
     STEINS;GATE RE:BOOT (`sgre_steam.exe`), including its dual-subtitle patch.
     After returning to the title or loading a save the link finds the new scene by itself.
 - The dialogue box does not need to be visible, and the game can stay fullscreen.
-  If the game restarts, the link reconnects to the same executable on its own.
+  If the game restarts, the link reconnects on its own.
 - Diagnostic: `python game_link.py` prints each new line while you play
   (`--script <script.json>` also prints the 台本's Japanese for each line).
 

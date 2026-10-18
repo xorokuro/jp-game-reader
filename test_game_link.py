@@ -182,8 +182,36 @@ class GameLinkSettings(unittest.TestCase):
         rows = [{'handle': 5, 'pid': 9, 'process': 'totsulover.exe', 'title': 'ディメンション凸ラバース!!'}]
         chosen = capture_sources.select({'mode': 'game', 'handle': 5, 'pid': 9}, rows)
         self.assertEqual((chosen['capture_mode'], chosen['window_pid'], chosen['window_process']), ('game', 9, 'totsulover.exe'))
+        # A window that closed, or none picked ("automatic"): game link finds the running game by itself.
+        for body in ({'mode': 'game', 'handle': 6, 'pid': 9}, {'mode': 'game'}):
+            auto = capture_sources.select(body, rows)
+            self.assertEqual((auto['capture_mode'], auto['window_pid'], auto['window_process']), ('game', 0, ''))
         with self.assertRaises(ValueError):
-            capture_sources.select({'mode': 'game', 'handle': 6, 'pid': 9}, rows)
+            capture_sources.select({'mode': 'window', 'handle': 6, 'pid': 9}, rows)
+
+    def test_candidates_find_running_games(self):
+        alive = [(4, 'ApplicationFrameHost.exe'), (7, 'chrome.exe'), (9, 'totsulover.exe'), (12, 'sgre_steam.exe')]
+        # Nothing picked: every running supported game, in process order.
+        self.assertEqual(game_link.candidates(alive), [(9, 'totsulover.exe'), (12, 'sgre_steam.exe')])
+        # The picked window comes first, even when it is not a known game.
+        self.assertEqual(game_link.candidates(alive, 4, 'ApplicationFrameHost.exe')[0], (4, 'ApplicationFrameHost.exe'))
+        # Once it turned out not to be a game, it is skipped and the running game is used.
+        skip = {(4, 'applicationframehost.exe')}
+        self.assertEqual(game_link.candidates(alive, 4, 'ApplicationFrameHost.exe', skip)[0], (9, 'totsulover.exe'))
+        # The picked game restarted with a new pid: found again by its executable name.
+        self.assertEqual(game_link.candidates([(20, 'sgre_steam.exe'), (21, 'totsulover.exe')], 12, 'sgre_steam.exe')[0],
+                         (20, 'sgre_steam.exe'))
+        self.assertEqual(game_link.candidates([(7, 'chrome.exe')]), [])
+        self.assertIn('ディメンション凸ラバース!!', game_link.supported_games())
+
+    def test_game_link_survives_restart(self):
+        import journal
+        self.assertEqual(journal.startup_capture_mode({'capture_mode': 'game'}, True), 'game')
+        self.assertEqual(journal.startup_capture_mode({'capture_mode': 'window'}, True), 'paste')
+        self.assertEqual(journal.startup_capture_mode({'capture_mode': 'obs'}, True), 'paste')
+        self.assertEqual(journal.startup_capture_mode({}, True), 'paste')
+        self.assertEqual(journal.startup_capture_mode({}, False), 'obs')
+        self.assertEqual(journal.startup_capture_mode({'capture_mode': 'window'}, False), 'window')
 
     def test_japanese_window_title_finds_script(self):
         import json, tempfile

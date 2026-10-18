@@ -43,9 +43,11 @@ def select(body,available=None):
     mode=body.get('mode')
     if mode not in ('paste','obs','window','game'):raise ValueError('Choose Pasted text, OBS projector, Game window, or Game link.')
     result={'capture_mode':mode,'window_handle':0,'window_pid':0,'window_title':'','window_process':''}
+    if mode=='game' and not body.get('handle'):return result   # Game link finds the running supported game by itself
     if mode in ('window','game'):
         rows=windows() if available is None else available
         row=next((row for row in rows if row['handle']==body.get('handle') and row['pid']==body.get('pid')),None)
+        if row is None and mode=='game':return result              # the picked window closed: find the game automatically
         if row is None:raise ValueError('That window closed. Refresh the list and select it again.')
         # Game link reads the game's memory (read-only); the executable name lets it reconnect after a restart.
         result.update(window_handle=row['handle'],window_pid=row['pid'],window_title=row['title'],window_process=row['process'])

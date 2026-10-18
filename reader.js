@@ -105,7 +105,7 @@
   let targets=[],activeMode='paste';
   function showSource(){
     windows.hidden=refresh.hidden=mode.value!=='window'&&mode.value!=='game';
-    hint.textContent=mode.value==='paste'?'Paste, read and look up words without OBS or a running game.':mode.value==='obs'?'Keep the OBS projector visible. Capture uses OCR; it does not read game memory.':mode.value==='game'?'遊戲連動：直接讀取遊戲目前顯示的台詞編號（唯讀，不用 OCR，對話框被擋住也沒關係），再顯示台本裡同一句的日文＋譯文。選遊戲視窗後按 Use this source。目前支援 Pal 引擎（例：ディメンション凸ラバース!!）和 M2 Kaleido 引擎（例：STEINS;GATE RE:BOOT）。':'Choose a visible game window. Keep its dialogue uncovered. Use OBS if the game cannot be captured directly.';
+    hint.textContent=mode.value==='paste'?'Paste, read and look up words without OBS or a running game.':mode.value==='obs'?'Keep the OBS projector visible. Capture uses OCR; it does not read game memory.':mode.value==='game'?'遊戲連動：直接讀取遊戲目前顯示的是哪一句（唯讀，不用 OCR，對話框被擋住也沒關係），再顯示台本裡同一句的日文＋譯文。選「自動」按 Use this source 就好：Reader 會自己找正在玩的遊戲（ディメンション凸ラバース!!、STEINS;GATE RE:BOOT），換遊戲、重開遊戲或重開 Reader 都會自動跟上。':'Choose a visible game window. Keep its dialogue uncovered. Use OBS if the game cannot be captured directly.';
   }
   function applyMode(value){
     activeMode=value;document.body.dataset.inputMode=value;
@@ -113,11 +113,12 @@
   }
   async function listWindows(selected){
     const result=await api('capture-sources');targets=result.windows;windows.replaceChildren();
+    // Game link: "automatic" finds the running supported game by itself, so no window has to be picked.
+    if(mode.value==='game'){const auto=E('option','自動：找正在玩的遊戲（建議）');auto.value='auto';windows.append(auto);}
     for(const row of targets){const option=E('option',row.process+' · '+row.title);option.value=String(row.handle);windows.append(option);}
     if(selected&&targets.some(row=>row.handle===selected))windows.value=String(selected);
-    // Game link: preselect a window whose title matches a loaded 台本 (e.g. ディメンション凸ラバース!!).
-    else if(mode.value==='game'){try{const titles=(await api('script/list')).scripts.map(s=>s.title.normalize('NFKC').replace(/\s+/g,''));const hit=targets.find(row=>titles.some(t=>t.length>1&&row.title.normalize('NFKC').replace(/\s+/g,'').includes(t)));if(hit)windows.value=String(hit.handle);}catch{}}
-    if(!targets.length){const option=E('option','No visible windows — open the game and refresh');option.value='';windows.append(option);}
+    else if(mode.value==='game')windows.value='auto';
+    if(!targets.length&&mode.value!=='game'){const option=E('option','No visible windows — open the game and refresh');option.value='';windows.append(option);}
   }
   refresh.onclick=()=>action(()=>listWindows(Number(windows.value)));
   mode.onchange=()=>{showSource();if(mode.value==='window'||mode.value==='game')action(()=>listWindows());};

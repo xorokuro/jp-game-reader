@@ -283,6 +283,12 @@ class Matcher:
         if score<.92:return None
         if score<1 and len(ranked)>1 and coverage[ranked[1]]==coverage[n] and best[ranked[1]]>score-.05:return None
         return {**self.items[n],'confidence':score}
+def startup_capture_mode(settings,no_capture):
+    """Source at startup. Screen capture (OBS / game window) starts off unless --obs. Game link reads a
+    supported game's memory (read-only, no screenshots), so it stays on: the next running game is followed."""
+    mode=settings.get('capture_mode') or ('paste' if no_capture else 'obs')
+    return 'paste' if no_capture and mode!='game' else mode
+
 def attach_translation(journal,row,item):
     """Fill empty translations from the matched script line (the game's official EN / 繁中)."""
     if not row or not item or row.get('english') or not (item.get('en') or item.get('zh')):return row
@@ -325,8 +331,7 @@ def main():
     preferences_path=Path(args.database).parent/'preferences.json'
     config_path=Path(args.database).parent/'settings.json';settings={'process':'obs64','crop_top':.55,'crop_height':.43}
     if config_path.exists():settings.update(json.loads(config_path.read_text(encoding='utf-8')))
-    settings.setdefault('capture_mode','obs' if not args.no_capture else 'paste')
-    if args.no_capture:settings['capture_mode']='paste'
+    settings['capture_mode']=startup_capture_mode(settings,args.no_capture)
     journal.save_text=settings['capture_mode'] in ('obs','window','game')
     # Extracted game scripts: readable/searchable in the 台本 tab, and used to correct OCR.
     library=script_library.Library(Path(args.database).parent/'scripts');recorder=Recorder(journal,Matcher([]))
@@ -342,7 +347,7 @@ def main():
         except Exception as e:
             script_state.update(active=None,status='Script error: '+str(e))
     threading.Thread(target=choose_matcher,daemon=True).start()
-    state={'status':'Starting recorder','paused':True,'raw':'','last':journal.get(journal.recent()[0]['id']) if journal.recent() else None,'version':0,'retry':{'pending':False,'message':''}};lock=threading.RLock();stop=threading.Event();restart=threading.Event();worker=[None]
+    state={'status':'Starting recorder','paused':settings['capture_mode']!='game','raw':'','last':journal.get(journal.recent()[0]['id']) if journal.recent() else None,'version':0,'retry':{'pending':False,'message':''}};lock=threading.RLock();stop=threading.Event();restart=threading.Event();worker=[None]
     origin=f'http://127.0.0.1:{args.port}'
     import deepl_web
     web_queue=deepl_web.Queue(journal)
@@ -358,17 +363,28 @@ def main():
             if n and (not wanted or sentence_key(script.rows[n-1]['ja'])==wanted):return script,script.rows[n-1]
         return None
 
-    def game_pid(cfg):
-        import game_link
-        alive={pid:name for pid,name in game_link.processes()}
-        wanted=cfg.get('window_process','').lower()
-        if cfg.get('window_pid') in alive and (not wanted or alive[cfg['window_pid']].lower()==wanted):return cfg['window_pid']
-        # The game was restarted: follow the same executable.
-        pid=next((pid for pid,name in alive.items() if wanted and name.lower()==wanted),None)
-        if pid is None:raise game_link.LinkError('找不到遊戲。請先開遊戲（重開遊戲後會自動重新連上）。')
-        return pid
-
     game_links={}   # pid -> attached Link, kept across pause/restart so we do not rescan memory each time
+    not_games=set() # (pid, exe) found not to be a readable game, e.g. a window picked by mistake: never rescanned
+
+    def connect_game(cfg):
+        """Attach to the game to follow: the one picked in Read from, else any running supported game."""
+        import game_link
+        alive=list(game_link.processes())
+        not_games.intersection_update((pid,name.lower()) for pid,name in alive)   # pids are reused after a process exits
+        known=game_link.known_exes();error=None
+        for pid,exe in game_link.candidates(alive,cfg.get('window_pid'),cfg.get('window_process',''),not_games):
+            link=game_links.get(pid)
+            if link is not None and link.alive():return link
+            with lock:state['status']='正在連接遊戲…'
+            try:link=game_link.Link(pid,exe)
+            except (game_link.LinkError,OSError) as e:
+                if exe.lower() in known:error=e          # a supported game that is still starting: try again soon
+                else:not_games.add((pid,exe.lower()))
+                continue
+            for old in game_links.values():old.close()
+            game_links.clear();game_links[pid]=link
+            return link
+        raise error or game_link.LinkError('等遊戲開啟…遊戲一開就會自動連上（支援：'+game_link.supported_games()+'）。')
 
     def follow_game(cfg):
         """Game link: read the line on screen from the game's memory (read-only) and show that 台本 line. No OCR."""
@@ -382,11 +398,7 @@ def main():
                 last=None;restart.wait(.5);continue
             try:
                 if link is None:
-                    pid=game_pid(cfg);link=game_links.get(pid)
-                    if link is None or not link.alive():
-                        with lock:state['status']='正在連接遊戲…'
-                        for old in game_links.values():old.close()
-                        game_links.clear();link=game_links[pid]=game_link.Link(pid,cfg.get('window_process',''))
+                    link=connect_game(cfg)
                     with lock:state['status']=f'已連上遊戲（{link.engine.name} 引擎）· 等待台詞…'
                 line=link.current()
             except (game_link.LinkError,OSError) as e:

@@ -198,7 +198,8 @@ class Process:
 class PalEngine:
     """Pal engine (dll\\Pal.dll). Offsets are from the VM context (task data + 0x338)."""
     name = 'Pal'
-    exes = ('totsulover.exe',)                     # only orders the search; any Pal game is detected
+    exes = ('totsulover.exe',)                     # found automatically; another Pal game can be picked in Read from
+    games = ('ディメンション凸ラバース!!',)
     TEXT_PTR, TEXT_SIZE = 0x3F158, 0x3F168        # loaded TEXT.DAT buffer and its size
     SCRIPT_PTR = 0x55E94                           # loaded SCRIPT.SRC buffer ("Sv20")
     CURRENT = 0x4 + 0x1094                         # text window: TEXT.DAT offset of the line on screen
@@ -260,7 +261,8 @@ class KaleidoEngine:
     length at +0x28 and their UTF-8 text at +0x38.
     """
     name = 'Kaleido'
-    exes = ('sgre_steam.exe',)                     # only orders the search; any matching game is detected
+    exes = ('sgre_steam.exe',)                     # found automatically; another Kaleido game can be picked in Read from
+    games = ('STEINS;GATE RE:BOOT',)
     NULL, INTEGER, BOOL, STRING = 0x01000001, 0x05000002, 0x01000008, 0x08000010
     # ScenePlayer fields from curSceneName on (envplayer.nut): 0 curSceneName, 1 curSceneId, 2 curSceneInfo,
     # 3 curSceneSelect, 4 curTextStart, 5 cur, 6 curPoint, 7 curLine, 8 curTextId, 9 curReaded, 10 curEvent,
@@ -369,6 +371,33 @@ def engines_for(exe=''):
     """Engines in the order to try them: those known for this executable first."""
     exe = (exe or '').lower()
     return sorted(ENGINES, key=lambda engine: exe not in engine.exes)
+
+
+def known_exes():
+    """Executables of games the engines know: game link finds these by itself."""
+    return {exe for engine in ENGINES for exe in engine.exes}
+
+
+def supported_games():
+    return '、'.join(game for engine in ENGINES for game in engine.games)
+
+
+def candidates(alive, pid=None, exe='', skip=()):
+    """(pid, exe) of the processes to try for game link, best first.
+
+    ``alive`` is [(pid, exe)] of running processes. The process picked in Read from comes first (by pid,
+    or by executable name after the game restarted); then every running game an engine knows, so game
+    link works without picking a window, and after switching to another supported game. ``skip`` holds
+    (pid, lower-case exe) of processes already found not to be a readable game (a window picked by mistake)."""
+    exe = (exe or '').lower()
+    known = known_exes()
+    first = [(p, n) for p, n in alive if p == pid and (not exe or n.lower() == exe)]
+    first += [(p, n) for p, n in alive if exe and n.lower() == exe]
+    found = []
+    for p, n in first + [(p, n) for p, n in alive if n.lower() in known]:
+        if (p, n) not in found and (p, n.lower()) not in skip:
+            found.append((p, n))
+    return found
 
 
 def visible(raw):
