@@ -36,6 +36,7 @@ Command line (diagnostic): ``python game_link.py [--pid N] [--process NAME] [--s
 prints each new line as you advance the game.
 """
 import argparse
+import array
 import ctypes
 import hashlib
 import json
@@ -403,17 +404,27 @@ class AtlusBmdEngine:
     """Atlus message scripts in Unreal Engine 4 (ペルソナ３ リロード, P3R.exe).
 
     To show a message the game converts its message file into a little-endian copy (header "MSG1",
-    self-relative offsets) and makes a small "message work" for the page it shows:
+    self-relative offsets) and makes small "message works" pointing at pages of it:
         -9  0x28 while its message is open
         -8  u64 1
         +0  start of the copy
         +8  start of the page (inside the copy)
         +32 bytes 01 01 20 00, then the text colour (field messages: unset = FFFFFFFF until shown)
-        +44 u32 state: 0 for the pages of the open message
-        +52 bit 16 set: the next page, not shown yet
-    Works are made and freed message by message, so the engine finds them by scanning memory: every poll the
-    64 KB memory pages where works were seen before (cheap), and every few seconds all small regions (where the
-    game keeps small objects). Of the works on screen, the one that appeared or was shown last is the line.
+        +40 u32 kind: 1 field message, tutorial, movie subtitle; 9 event; 0 choice
+        +44 u32 state: 0 for the pages of the open message; 5 for the backlog's copy of a page
+        +52 bit 16 set while a page's line is still to come or playing (not what is on screen)
+    Events make a work for every page when the message opens; tutorials do too and move one of them from page
+    to page; field messages make the next page's work (uncoloured) when a page is shown. When a page is shown the
+    game also adds it to the backlog (a work with state 5), so the page on screen is the open page whose backlog
+    copy appeared last; for messages without a backlog (tutorials, system messages, movie subtitles) it is the open
+    page that a work appeared on, moved to, was coloured or stopped waiting last (at the same moment: the page more
+    works point at, then the earlier page).
+    Works are made and freed message by message, so the engine finds them by scanning memory. A work is a
+    160-byte object of Unreal's small-object allocator, which keeps objects of one size together in 64 KB pages
+    whose first bytes say the size (u16), the pool and E3. So every poll the engine reads the ~100 pages of
+    160-byte objects (only where a work can start; a few ms), and every few seconds it looks for new such
+    pages (region list + page headers, ~0.1 s). Should works turn up elsewhere (another allocator), a slow scan of
+    all small regions still finds them and their pages are read every poll too.
     Which file a copy came from is looked up in game_link_index.json (written beside the 台本 by the game's patch
     tool): fingerprints of the message names and of each page's Japanese -> the file. A bilingual patch only
     adds a line after the Japanese, so the fingerprints are the same with or without one.
@@ -426,9 +437,14 @@ class AtlusBmdEngine:
     PATCH_MARK = b'\xfe\xf2\x01\x16\x01'     # colour 21: where a bilingual patch's added line starts
     SMALL = 0x10000                          # full scans read only regions up to this size
     PAGE = 0x10000                           # small objects live in 64 KB pages; works are remembered by page
+    SIZES = (160,)                           # size of a work as an allocator object (more are learned)
+    MARK_AT = 56                             # where MARK is in the object (24 bytes before the pair + 32)
+    CANARY = 0xE3                            # 4th byte of an allocator page
+    POOL_EVERY = 3.0                         # seconds between looks for new allocator pages of works' size
     WAITS = (1.0, 2.0, 3.0, 5.0)             # seconds between full scans while nothing is on screen
     RESCAN = 5.0                             # ... and while something is (a new work may be in a new page)
-    SOONEST = 0.5                            # a full scan right away when the line on screen goes away
+    SLOW = 30.0                              # ... once allocator pages of works are known (just in case)
+    SOONEST = 0.5                            # a look right away when the line on screen goes away
     MAX_PAGES = 128
     VARS = {(4, 1): '〈主人公〉', (4, 2): '〈主人公〉', (4, 3): '〈名前〉', (4, 4): '〈アイテム〉', (2, 4): '〈数〉',
             (1, 3): '〈ボタン〉', (4, 30): '〈能力〉', (4, 31): '〈ランク〉'}
@@ -438,7 +454,11 @@ class AtlusBmdEngine:
         self.full_index, self.first_index = self.load_index()
         self.parsed = {}                     # (copy start, first 64 bytes) -> parsed copy or None
         self.pages = {}                      # 64 KB pages where works were seen -> last seen
-        self.works = {}                      # pair address -> (copy start, page start, shown, uncoloured, changed at)
+        self.sizes = set(self.SIZES)         # allocator object sizes that hold works
+        self.pool = {}                       # allocator pages of those sizes -> object size
+        self.next_pool = 0.0
+        self.last_look = -1.0
+        self.works = {}                      # pair address -> work (see work) + since when it is so
         self.next_full = 0.0
         self.last_full = -1.0
         self.misses = 0
@@ -640,28 +660,103 @@ class AtlusBmdEngine:
         return {'key': key, 'label': f'{short} {name}#{j}', 'number': k, 'text': text, 'speaker': who}
 
     # ---- finding message works ----
+    def work(self, data, i):
+        """The message work whose MARK is at data[i] as (copy start, page start, kind, uncoloured, waiting), or None.
+        kind: 'open' (a page of the open message), 'log' (the backlog's copy of a shown page) or '' (other);
+        waiting: bit 16, set while the page's line is still to come or playing."""
+        if i < 48 or i + 24 > len(data):
+            return None
+        one, start, page = struct.unpack_from('<QQQ', data, i - 40)
+        if one != 1 or not 0x10000 < start < page < start + 0x800000:
+            return None
+        live = data[i - 41] == 0x28                                            # set while its message is open
+        what, state = struct.unpack_from('<II', data, i + 8)                   # what: 0 = choice
+        white = struct.unpack_from('<I', data, i + 4)[0] == 0xFFFFFFFF         # colour not set (yet)
+        waiting = bool(struct.unpack_from('<I', data, i + 20)[0] & 0x10000)
+        kind = 'open' if live and state == 0 and what != 0 else 'log' if state == 5 else ''
+        return start, page, kind, white, waiting
+
     def works_in(self, base, data):
-        """{pair address: (copy start, page start, on screen, look)} of the message works in ``data``."""
+        """{pair address: (copy start, page start, kind, uncoloured, waiting)} of the message works in ``data``."""
         found = {}
         i = data.find(self.MARK)
         while i != -1:
-            at = base + i - 32
-            if i >= 48 and at % 8 == 0 and i + 24 <= len(data):
-                one, start, page = struct.unpack_from('<QQQ', data, i - 40)
-                if one == 1 and 0x10000 < start < page < start + 0x800000:
-                    live = data[i - 41] == 0x28                                  # set while its message is open
-                    state, = struct.unpack_from('<I', data, i + 12)            # 0 = this page is shown or next
-                    pending = bool(struct.unpack_from('<I', data, i + 20)[0] & 0x10000)   # next page, not shown yet
-                    white = struct.unpack_from('<I', data, i + 4)[0] == 0xFFFFFFFF      # colour not set (yet)
-                    found[at] = (start, page, live and state == 0 and not pending, white)
+            if (base + i - 32) % 8 == 0:
+                one = self.work(data, i)
+                if one:
+                    found[base + i - 32] = one
             i = data.find(self.MARK, i + 1)
         return found
 
-    def scan_known(self):
-        """Works in the pages where works were seen before (their committed parts)."""
+    MARK_WORD = array.array('I', MARK)[0]             # MARK as one 4-byte word (pages are read as words)
+
+    def pool_works(self, page, size, data):
+        """Works in an allocator page of ``size``-byte objects, looking only where an object's MARK can be
+        (objects are handed out from the end of the page: they start at 64 KB % size + k * size)."""
+        first = self.PAGE % size + self.MARK_AT
+        if size % 4 or first % 4 or len(data) != self.PAGE or array.array('I').itemsize != 4:
+            return self.works_in(page, data)
+        words = array.array('I')
+        words.frombytes(data)
+        column = words[first // 4::size // 4]
         found = {}
+        if self.MARK_WORD in column:
+            for k, word in enumerate(column):
+                if word == self.MARK_WORD:
+                    i = first + k * size
+                    one = self.work(data, i)
+                    if one:
+                        found[page + i - 32] = one
+        return found
+
+    def object_size(self, page, at):
+        """The object size of allocator page ``page`` if the work at ``at`` is one of its objects, else None.
+        An allocator page starts with u16 object size, u8 pool, u8 E3."""
+        head = self.process.read(page, 4)
+        if not head or len(head) != 4 or head[3] != self.CANARY:
+            return None
+        size = struct.unpack_from('<H', head)[0]
+        if size < self.MARK_AT + 32 or (at + 32 - self.MARK_AT - page - self.PAGE % size) % size:
+            return None
+        return size
+
+    def look_for_pool(self):
+        """Find the allocator pages of the sizes works have (64 KB regions); returns the ones new since last time.
+        Pages already known are checked by every read in scan_known, so only the others' headers are read."""
+        pool, new = {}, []
+        for base, size in self.process.regions():
+            if size != self.PAGE or base % self.PAGE:
+                continue
+            if base in self.pool:
+                pool[base] = self.pool[base]
+                continue
+            head = self.process.read(base, 4)
+            if head and len(head) == 4 and head[3] == self.CANARY and struct.unpack_from('<H', head)[0] in self.sizes:
+                pool[base] = struct.unpack_from('<H', head)[0]
+                new.append(base)
+        self.pool = pool
+        self.next_pool = time.monotonic() + self.POOL_EVERY
+        return new
+
+    def read_pool(self, pages):
+        """Works in these allocator pages; pages given back or reused for objects of another size are dropped."""
+        found = {}
+        for page in pages:
+            size = self.pool.get(page)
+            data = self.process.read(page, self.PAGE) if size else None
+            if not data or len(data) < 4 or data[3] != self.CANARY or struct.unpack_from('<H', data)[0] != size:
+                self.pool.pop(page, None)
+                continue
+            found.update(self.pool_works(page, size, data))
+        return found
+
+    def scan_known(self):
+        """Works in the allocator pages of works' size, and in other pages where works were seen."""
+        found = self.read_pool(list(self.pool))
         committed = getattr(self.process, 'committed', None)
         for page in list(self.pages):
+            if page in self.pool:
+                continue
             for base, size in (committed(page, self.PAGE) if committed else [(page, self.PAGE)]):
                 data = self.process.read(base, size)
                 if data:
@@ -669,7 +764,8 @@ class AtlusBmdEngine:
         return found
 
     def scan_all(self, now):
-        """Works in all small memory regions; remembers their pages."""
+        """Works in all small memory regions. Their pages are remembered: as allocator pages if they are (which
+        also teaches the object size), else as pages to read every poll."""
         found = {}
         for base, size in self.process.regions():
             if size > self.SMALL:
@@ -681,49 +777,88 @@ class AtlusBmdEngine:
             if here:
                 found.update(here)
                 for at in here:
-                    self.pages[at & ~(self.PAGE - 1)] = now
+                    page = at & ~(self.PAGE - 1)
+                    if page in self.pool:
+                        continue
+                    size = self.object_size(page, at)
+                    if size:
+                        self.sizes.add(size)
+                        self.pool[page] = size
+                        self.pages.pop(page, None)
+                    else:
+                        self.pages[page] = now
         if len(self.pages) > self.MAX_PAGES:
             for page in sorted(self.pages, key=self.pages.get)[:len(self.pages) - self.MAX_PAGES]:
                 del self.pages[page]
         return found
 
     def current(self):
-        """The line on screen: {'key', 'label', 'number', 'text', 'speaker'} or None.
-
-        Works on screen: open, state 0 and not waiting as the next page. The one that last appeared, moved to
-        another page or became shown is the line; field messages keep the next page's work uncoloured until it is
-        shown, so an uncoloured work does not count while another work of the same file is coloured."""
+        """The line on screen: {'key', 'label', 'number', 'text', 'speaker'} or None (see on_screen)."""
         now = time.monotonic()
+        if now >= self.next_pool:
+            self.look_for_pool()
         found = self.scan_known()
-        gone = self.shown_at is not None and not (found.get(self.shown_at) or (0, 0, False))[2]
-        if now >= self.next_full or (gone and now - self.last_full >= self.SOONEST):
-            before = len(self.pages)
+        gone = self.shown_at is not None and (found.get(self.shown_at) or (0, 0, ''))[2] != 'open'
+        if gone and self.pool and now - self.last_look >= self.SOONEST:
+            # the line went away: the next one may be in a page that only just became an allocator page
+            self.last_look = now
+            found.update(self.read_pool(self.look_for_pool()))
+        if now >= self.next_full or (gone and not self.pool and now - self.last_full >= self.SOONEST):
+            before = len(self.pages) + len(self.pool)
             found.update(self.scan_all(now))
             self.last_full = now
             if self.debug:
                 print(f'[atlus] full scan {time.monotonic() - now:.2f}s{" (line gone)" if gone else ""}: {len(found)} works, '
-                      f'{len(self.pages) - before} new pages, {len(self.pages)} known', flush=True)
-            showing = any(w[2] for w in found.values())
+                      f'{len(self.pages) + len(self.pool) - before} new pages, {len(self.pool)} allocator pages '
+                      f'(sizes {sorted(self.sizes)}), {len(self.pages)} other pages', flush=True)
+            showing = any(w[2] == 'open' for w in found.values())
             self.misses = 0 if showing else self.misses + 1
-            wait = self.RESCAN if showing else self.WAITS[min(self.misses, len(self.WAITS)) - 1]
+            if self.pool:
+                wait = self.SLOW
+            else:
+                wait = self.RESCAN if showing else self.WAITS[min(self.misses, len(self.WAITS)) - 1]
             self.next_full = time.monotonic() + wait
         works = {}
-        for at, (start, page, shown, white) in found.items():
+        for at, w in found.items():
             old = self.works.get(at)
-            same = old and old[:4] == (start, page, shown, white)
-            works[at] = (start, page, shown, white, old[4] if same else now)
+            works[at] = w + (old[5] if old and old[:5] == w else now,)
         self.works = works
-        coloured = {w[0] for w in works.values() if w[2] and not w[3]}
-        on = sorted((w[4], w[1], at) for at, w in works.items() if w[2] and not (w[3] and w[0] in coloured))
-        for _, _, at in reversed(on):
-            line = self.line(*works[at][:2])
+        for start, page, at in self.on_screen(works):
+            line = self.line(start, page)
             if line:
                 if self.debug and at != self.shown_at:
-                    print(f'[atlus] line from work {at:x} ({len(on)} on screen)', flush=True)
+                    print(f'[atlus] line from work {at:x}', flush=True)
                 self.shown_at = at
                 return line
         self.shown_at = None
         return None
+
+    @staticmethod
+    def on_screen(works):
+        """(copy start, page start, a work's address) of the pages that may be on screen, most likely first.
+        works: {address: (copy start, page start, kind, uncoloured, waiting, since)}."""
+        pages = {}                                   # (copy, page) -> [backlog copy since, open work since, works, address]
+        coloured = {w[0] for w in works.values() if w[2] == 'open' and not w[3]}
+        for at, (start, page, kind, white, waiting, since) in works.items():
+            if kind == 'open':
+                p = pages.setdefault((start, page), [None, None, 0, at])
+                p[2] += 1
+                # without a backlog: not a field message's next page (uncoloured) or a line still to come
+                if not (white and start in coloured) and not waiting:
+                    p[1] = since if p[1] is None else max(p[1], since)
+        for start, page, kind, white, waiting, since in works.values():
+            p = pages.get((start, page)) if kind == 'log' else None
+            if p:
+                p[0] = since if p[0] is None else max(p[0], since)
+        logged = {start for (start, page), p in pages.items() if p[0] is not None}
+        ranked = []
+        for (start, page), (log, opened, count, at) in pages.items():
+            if start in logged:                          # a message with a backlog: only pages shown so far count
+                if log is not None:
+                    ranked.append(((log, 1, count, page), start, page, at))
+            elif opened is not None:
+                ranked.append(((opened, 0, count, -page), start, page, at))
+        return [(start, page, at) for _, start, page, at in sorted(ranked, reverse=True)]
 
 
 ENGINES = (PalEngine, KaleidoEngine, AtlusBmdEngine)

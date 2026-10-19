@@ -226,12 +226,24 @@ def msg1(dialogs, speakers=()):
     return bytes(out)
 
 
-def work(copy, page, state=0, open_=True, pending=False, colour=0xF0F3FCFF):
+def work(copy, page, state=0, open_=True, pending=False, colour=0xF0F3FCFF, kind=1):
     """A P3R "message work" from 16 bytes before its (copy, page) pair: 0x28 while its message is open, 1, copy
-    start, page start, ..., 01 01 20 00 + text colour, state (0 = page of the open message), bit 16 = next page."""
+    start, page start, ..., 01 01 20 00 + text colour, kind (0 = choice), state (0 = page of the open message,
+    5 = backlog), bit 16 = the page's line is still to come or playing."""
     return (b'\0' * 7 + (b'\x28' if open_ else b'\0') + struct.pack('<QQQ', 1, copy, page) + b'\0' * 16 +
-            b'\x01\x01\x20\x00' + struct.pack('<I', colour) + struct.pack('<II', 1, state) +
+            b'\x01\x01\x20\x00' + struct.pack('<I', colour) + struct.pack('<II', kind, state) +
             struct.pack('<II', 0xF761, 0x10000 if pending else 0) + b'\0' * 8)
+
+
+def pool_page(*works, size=160):
+    """A 64 KB page of Unreal's small-object allocator: header (object size, pool, E3), objects handed out from
+    the end of the page; each work goes in an object, its (copy, page) pair 24 bytes in."""
+    page = bytearray(0x10000)
+    struct.pack_into('<HBBI', page, 0, size, 8, 0xE3, 0)
+    for k, w in enumerate(works):
+        at = 0x10000 - (k + 1) * size + 8
+        page[at:at + len(w)] = w
+    return bytes(page)
 
 
 ME = b'\xfe\xf1\x81'                     # the protagonist's name (function 4, 1)
@@ -239,9 +251,22 @@ ZH = b'\xfe\xf2\x01\x16\x01'            # a bilingual patch's colour 21: its Chi
 
 
 class AtlusLink(unittest.TestCase):
-    COPY, WORKS = 0x30000000, 0x40000000
+    COPY, WORKS, POOL = 0x30000000, 0x40000000, 0x7FFF0000
 
     def setUp(self):
+        import time
+        import types
+        from unittest import mock
+        clock = {'now': time.monotonic()}
+
+        def monotonic():
+            clock['now'] += 0.001
+            return clock['now']
+        fake = types.SimpleNamespace(**{k: getattr(time, k) for k in dir(time) if not k.startswith('_')})
+        fake.monotonic = monotonic
+        patcher = mock.patch.object(game_link, 'time', fake)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.pages = [ME + 'さん、おはよう。'.encode() + b'\n' + ZH + '早安。'.encode() + b'\xfe\xf2\x01\x1c\x01\0',
                       'もう寝よう…'.encode() + b'\r\n' + b'\0', '……'.encode() + b'\0']
         self.copy = msg1([(b'MSG_000_0_0', self.pages[:2], 0), (b'MND_001_0_0', self.pages[2:], 1)], ['山田', '主人公'])
@@ -303,19 +328,86 @@ class AtlusLink(unittest.TestCase):
         self.show(work(self.COPY, self.page_at[0]), work(self.COPY, self.page_at[2], state=0))
         self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|1:MND_001_0_0#0')
 
-    def test_next_page_waits_until_shown(self):
-        # events: the next page's work exists early, marked as "next"; the line moves when it is shown
+    def test_event_page_on_screen_is_the_last_one_logged(self):
+        # events: every page gets a work when the message opens (bit 16 set until its line has played); a page
+        # joins the backlog (a work with state 5) when it is shown
         engine = self.engine()
         white = 0xFFFFFFFF
-        self.show(work(self.COPY, self.page_at[0], colour=white), work(self.COPY, self.page_at[1], pending=True, colour=white))
-        engine.next_full = 0
+        pages = [work(self.COPY, at, pending=True, colour=white) for at in self.page_at[:2]]
+        log = lambda at: work(self.COPY, at, state=5, open_=False, pending=True, colour=white)
+        self.show(*pages, log(self.page_at[0]))
         self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#0')
-        self.show(work(self.COPY, self.page_at[0], colour=white), work(self.COPY, self.page_at[1], colour=white))
+        # page 0 is left before its line has played (its bit stays set): page 1 is shown and logged
+        self.show(*pages, log(self.page_at[0]), log(self.page_at[1]))
         self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#1')
-        # connecting while both pages were already shown: the later page is the one on screen
-        fresh = self.engine()
-        fresh.next_full = 0
-        self.assertEqual(fresh.current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#1')
+        # connecting now: both pages were shown, the later one is on screen
+        self.assertEqual(self.engine().current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#1')
+        # the backlog of an earlier showing (another copy of the file) does not count
+        self.show(*pages, log(self.page_at[0]), work(self.COPY + 0x10, self.page_at[1] + 0x10, state=5, open_=False))
+        self.assertEqual(self.engine().current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#0')
+
+    def test_tutorial_page_is_where_the_moving_work_is(self):
+        # tutorials: a work for every page and one more that moves from page to page; no backlog, no colour
+        engine = self.engine()
+        white = 0xFFFFFFFF
+        pages = [work(self.COPY, at, colour=white) for at in self.page_at[:2]]
+        self.show(*pages, work(self.COPY, self.page_at[0], colour=white))
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#0')
+        self.show(*pages, work(self.COPY, self.page_at[1], colour=white))
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#1')
+        # connecting now: the page two works point at
+        self.assertEqual(self.engine().current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#1')
+
+    def test_choices_keep_the_question(self):
+        engine = self.engine()
+        question, log = work(self.COPY, self.page_at[1]), work(self.COPY, self.page_at[1], state=5, open_=False)
+        self.show(question, log)
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#1')
+        self.show(question, log, work(self.COPY, self.page_at[2], kind=0, colour=0xFFFFFFFF))
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#1')
+
+    def test_field_next_page_made_later_does_not_count(self):
+        engine = self.engine()
+        log = lambda at: work(self.COPY, at, state=5, open_=False, colour=0xFFFFFFFF)
+        self.show(work(self.COPY, self.page_at[0]), log(self.page_at[0]))
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#0')
+        self.show(work(self.COPY, self.page_at[0]), log(self.page_at[0]), work(self.COPY, self.page_at[1], colour=0xFFFFFFFF))
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#0')
+        self.show(work(self.COPY, self.page_at[0]), log(self.page_at[0]), work(self.COPY, self.page_at[1]), log(self.page_at[1]))
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#1')
+
+    def test_allocator_pages_are_read_every_poll(self):
+        engine = self.engine()
+        self.process.blocks[self.POOL] = pool_page()                       # 160-byte objects: where works live
+        self.process.blocks[self.POOL + 0x10000] = pool_page(size=192)     # other objects
+        self.assertIsNone(engine.current())
+        self.assertEqual(engine.pool, {self.POOL: 160})
+        engine.next_full = engine.next_pool = float('inf')                 # no full scan, no new look
+        self.process.blocks[self.POOL] = pool_page(work(self.COPY, self.page_at[0]))
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#0')
+        self.process.blocks[self.POOL] = pool_page(work(self.COPY, self.page_at[0]), work(self.COPY, self.page_at[2]))
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|1:MND_001_0_0#0')
+        self.process.blocks[self.POOL] = pool_page(size=48)                # page reused for other objects
+        self.assertIsNone(engine.current())
+        self.assertEqual(engine.pool, {})
+
+    def test_new_allocator_page_looked_for_when_the_line_goes_away(self):
+        engine = self.engine()
+        self.process.blocks[self.POOL] = pool_page(work(self.COPY, self.page_at[0]))
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#0')
+        engine.next_full = engine.next_pool = float('inf')
+        self.process.blocks[self.POOL] = pool_page()                                          # that message ended…
+        self.process.blocks[self.POOL + 0x20000] = pool_page(work(self.COPY, self.page_at[2]))   # …the next is in a new page
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|1:MND_001_0_0#0')
+
+    def test_learns_object_size_from_a_full_scan(self):
+        engine = self.engine()
+        self.process.blocks[self.POOL] = pool_page(work(self.COPY, self.page_at[0]), size=192)
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#0')
+        self.assertEqual((192 in engine.sizes, engine.pool), (True, {self.POOL: 192}))
+        engine.next_full = float('inf')
+        self.process.blocks[self.POOL] = pool_page(work(self.COPY, self.page_at[0]), work(self.COPY, self.page_at[2]), size=192)
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|1:MND_001_0_0#0')
 
     def test_field_next_page_uncoloured_until_shown(self):
         # field messages: the next page's work has no colour yet

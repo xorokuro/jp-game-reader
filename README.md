@@ -78,11 +78,14 @@ its translations), and the 台本 tab scrolls along while it is open.
     After returning to the title or loading a save the link finds the new scene by itself.
   - Atlus BMD messages in Unreal Engine 4 (ペルソナ３ リロード, `P3R.exe`): source = the message
     file (`Xrd777/Events/.../BMD_Event_Main_100_080_C`), id `<message index>:<message name>#<page>`.
-    Each page on screen has a small "message work"; the link finds works by scanning small memory
-    regions (every poll only the pages where works were seen before; a full scan every few seconds).
+    Pages of an open message have small "message works", and a shown page also gets a backlog copy;
+    the page on screen is the one whose backlog copy appeared last (tutorials: the page a work moved to).
+    Works are 160-byte objects of Unreal's small-object allocator, so every poll reads only its ~100
+    pages of 160-byte objects (a few ms) and looks for new ones every few seconds.
     Which file a loaded message file is comes from `game_link_index.json` beside the 台本 (written by
     the game's patch tool). Tested on Windows with Steam's Japanese version and its bilingual patch:
-    field messages, events, tutorials and movie subtitles.
+    field messages, events (also when a page is left before its voice ends), choices (the question
+    stays) and tutorials; movie subtitles were tested with the previous version of these rules.
 - The dialogue box does not need to be visible, and the game can stay fullscreen.
   If the game restarts, the link reconnects on its own.
 - Diagnostic: `python game_link.py` prints each new line while you play
