@@ -56,7 +56,7 @@ a new line, the reading card shows the same line from that game's 台本 (Japane
 its translations), and the 台本 tab scrolls along while it is open.
 
 - Automatic: the reader finds whichever supported game is running (ディメンション凸ラバース!!,
-  STEINS;GATE RE:BOOT), so one reader follows every game: start, quit or switch games
+  STEINS;GATE RE:BOOT, ペルソナ３ リロード), so one reader follows every game: start, quit or switch games
   and it follows along. A window picked in the list is tried first; if it is not a
   game the reader can read, the running supported game is used instead.
 - Game link stays on when the reader restarts (also with plain `Start Reader.cmd`):
@@ -76,6 +76,13 @@ its translations), and the 台本 tab scrolls along while it is open.
     extraction, e.g. `scenario/resg01_06.ks|*start#15`. Tested on Windows with
     STEINS;GATE RE:BOOT (`sgre_steam.exe`), including its dual-subtitle patch.
     After returning to the title or loading a save the link finds the new scene by itself.
+  - Atlus BMD messages in Unreal Engine 4 (ペルソナ３ リロード, `P3R.exe`): source = the message
+    file (`Xrd777/Events/.../BMD_Event_Main_100_080_C`), id `<message index>:<message name>#<page>`.
+    Each page on screen has a small "message work"; the link finds works by scanning small memory
+    regions (every poll only the pages where works were seen before; a full scan every few seconds).
+    Which file a loaded message file is comes from `game_link_index.json` beside the 台本 (written by
+    the game's patch tool). Tested on Windows with Steam's Japanese version and its bilingual patch:
+    field messages, events, tutorials and movie subtitles.
 - The dialogue box does not need to be visible, and the game can stay fullscreen.
   If the game restarts, the link reconnects on its own.
 - Diagnostic: `python game_link.py` prints each new line while you play

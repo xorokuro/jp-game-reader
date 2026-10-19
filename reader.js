@@ -105,7 +105,7 @@
   let targets=[],activeMode='paste';
   function showSource(){
     windows.hidden=refresh.hidden=mode.value!=='window'&&mode.value!=='game';
-    hint.textContent=mode.value==='paste'?'Paste, read and look up words without OBS or a running game.':mode.value==='obs'?'Keep the OBS projector visible. Capture uses OCR; it does not read game memory.':mode.value==='game'?'遊戲連動：直接讀取遊戲目前顯示的是哪一句（唯讀，不用 OCR，對話框被擋住也沒關係），再顯示台本裡同一句的日文＋譯文。選「自動」按 Use this source 就好：Reader 會自己找正在玩的遊戲（ディメンション凸ラバース!!、STEINS;GATE RE:BOOT），換遊戲、重開遊戲或重開 Reader 都會自動跟上。':'Choose a visible game window. Keep its dialogue uncovered. Use OBS if the game cannot be captured directly.';
+    hint.textContent=mode.value==='paste'?'Paste, read and look up words without OBS or a running game.':mode.value==='obs'?'Keep the OBS projector visible. Capture uses OCR; it does not read game memory.':mode.value==='game'?'遊戲連動：直接讀取遊戲目前顯示的是哪一句（唯讀，不用 OCR，對話框被擋住也沒關係），再顯示台本裡同一句的日文＋譯文。選「自動」按 Use this source 就好：Reader 會自己找正在玩的遊戲（ディメンション凸ラバース!!、STEINS;GATE RE:BOOT、ペルソナ３ リロード），換遊戲、重開遊戲或重開 Reader 都會自動跟上。':'Choose a visible game window. Keep its dialogue uncovered. Use OBS if the game cannot be captured directly.';
   }
   function applyMode(value){
     activeMode=value;document.body.dataset.inputMode=value;

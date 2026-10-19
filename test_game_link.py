@@ -6,8 +6,23 @@ import game_link
 
 
 class FakeProcess:
-    def __init__(self, blocks):
+    def __init__(self, blocks, exe=''):
         self.blocks = blocks            # {address: bytes}
+        self.exe = exe
+
+    def image_path(self):
+        return self.exe
+
+    def regions(self, private_only=True):
+        return [(base, len(data)) for base, data in sorted(self.blocks.items())]
+
+    def committed(self, address, size):
+        parts = []
+        for base, data in sorted(self.blocks.items()):
+            lo, hi = max(address, base), min(address + size, base + len(data))
+            if hi > lo:
+                parts.append((lo, hi - lo))
+        return parts
 
     def read(self, address, size):
         for base, data in self.blocks.items():
@@ -172,8 +187,191 @@ class KaleidoLink(unittest.TestCase):
 
     def test_engine_order(self):
         self.assertIs(game_link.engines_for('SGRE_Steam.exe')[0], game_link.KaleidoEngine)
+        self.assertIs(game_link.engines_for('P3R.exe')[0], game_link.AtlusBmdEngine)
         self.assertIs(game_link.engines_for('totsulover.exe')[0], game_link.PalEngine)
         self.assertEqual(set(game_link.engines_for('other.exe')), set(game_link.ENGINES))
+
+
+def msg1(dialogs, speakers=()):
+    """A converted Atlus message file as P3R keeps it in memory: "MSG1", little-endian, self-relative offsets
+    (the text size after each page table stays big-endian). dialogs: [(name, [page bytes], speaker index)]."""
+    count = len(dialogs)
+    out = bytearray(0x20 + 8 * count + 16)
+    out[8:12] = b'MSG1'
+    struct.pack_into('<I', out, 0x18, count)
+    rel = lambda at, target: struct.pack_into('<I', out, at, target - at)
+    for k, (name, pages, speaker) in enumerate(dialogs):
+        while len(out) % 4:
+            out += b'\0'
+        o = len(out)
+        struct.pack_into('<I', out, 0x20 + 8 * k, 0)
+        rel(0x20 + 8 * k + 4, o)
+        out += name.ljust(24, b'\0') + struct.pack('<HH', len(pages), speaker)
+        head = len(out)
+        out += b'\0' * (4 * len(pages)) + struct.pack('>I', sum(len(p) for p in pages))
+        for j, page in enumerate(pages):
+            rel(head + 4 * j, len(out))
+            out += page
+    while len(out) % 4:
+        out += b'\0'
+    so = 0x20 + 8 * count
+    table = len(out)
+    rel(so, table)
+    struct.pack_into('<I', out, so + 4, len(speakers))
+    out += b'\0' * (4 * len(speakers))
+    for k, name in enumerate(speakers):
+        rel(table + 4 * k, len(out))
+        out += name.encode('utf-8') + b'\0'
+    struct.pack_into('<I', out, 4, len(out))
+    return bytes(out)
+
+
+def work(copy, page, state=0, open_=True, pending=False, colour=0xF0F3FCFF):
+    """A P3R "message work" from 16 bytes before its (copy, page) pair: 0x28 while its message is open, 1, copy
+    start, page start, ..., 01 01 20 00 + text colour, state (0 = page of the open message), bit 16 = next page."""
+    return (b'\0' * 7 + (b'\x28' if open_ else b'\0') + struct.pack('<QQQ', 1, copy, page) + b'\0' * 16 +
+            b'\x01\x01\x20\x00' + struct.pack('<I', colour) + struct.pack('<II', 1, state) +
+            struct.pack('<II', 0xF761, 0x10000 if pending else 0) + b'\0' * 8)
+
+
+ME = b'\xfe\xf1\x81'                     # the protagonist's name (function 4, 1)
+ZH = b'\xfe\xf2\x01\x16\x01'            # a bilingual patch's colour 21: its Chinese line starts here
+
+
+class AtlusLink(unittest.TestCase):
+    COPY, WORKS = 0x30000000, 0x40000000
+
+    def setUp(self):
+        self.pages = [ME + 'さん、おはよう。'.encode() + b'\n' + ZH + '早安。'.encode() + b'\xfe\xf2\x01\x1c\x01\0',
+                      'もう寝よう…'.encode() + b'\r\n' + b'\0', '……'.encode() + b'\0']
+        self.copy = msg1([(b'MSG_000_0_0', self.pages[:2], 0), (b'MND_001_0_0', self.pages[2:], 1)], ['山田', '主人公'])
+        self.page_at = []
+        at = self.copy.index(self.pages[0])
+        for p in self.pages:
+            at = self.copy.index(p, at)
+            self.page_at.append(self.COPY + at)
+        self.process = FakeProcess({self.COPY: self.copy, 0x50000000: b'\0' * 64}, exe='C:\\Games\\P3R\\P3R.exe')
+
+    def engine(self, file='Xrd777/Events/BMD_Test'):
+        engine = game_link.AtlusBmdEngine.detect(self.process)
+        engine.full_index, engine.first_index = ({self.fingerprint(): file} if file else {}), {}
+        return engine
+
+    def fingerprint(self):
+        import hashlib
+        e = game_link.AtlusBmdEngine
+        h = hashlib.sha1()
+        for name, pages in ((b'MSG_000_0_0', self.pages[:2]), (b'MND_001_0_0', self.pages[2:])):
+            h.update(name + b'|')
+            for p in pages:
+                h.update(e.japanese(p) + b'#')
+        return h.hexdigest()
+
+    def show(self, *works):
+        block = b'\0' * 0x40 + b''.join(w.ljust(0xA0, b'\0') for w in works)
+        self.process.blocks[self.WORKS] = block
+
+    def test_detect_by_executable(self):
+        self.assertIsNotNone(game_link.AtlusBmdEngine.detect(FakeProcess({}, exe='D:\\SteamLibrary\\P3R.exe')))
+        self.assertIsNone(game_link.AtlusBmdEngine.detect(FakeProcess({0x1000: b'nothing'}, exe='C:\\notepad.exe')))
+        self.assertIs(game_link.engines_for('P3R.exe')[0], game_link.AtlusBmdEngine)
+        self.assertIn('ペルソナ３ リロード', game_link.supported_games())
+
+    def test_follow_pages(self):
+        engine = self.engine()
+        self.assertIsNone(engine.current())                  # nothing on screen yet
+        self.show(work(self.COPY, self.page_at[0]))
+        engine.next_full = 0
+        line = engine.current()
+        self.assertEqual(line, {'key': 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#0', 'label': 'BMD_Test MSG_000_0_0#0',
+                                'number': 0, 'text': '〈主人公〉さん、おはよう。', 'speaker': '山田'})
+        self.show(work(self.COPY, self.page_at[1]))           # same work, next page: no full scan needed
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#1')
+        self.assertEqual(engine.current()['text'], 'もう寝よう…')
+        self.show(work(self.COPY, self.page_at[2]))
+        line = engine.current()
+        self.assertEqual((line['key'], line['speaker'], line['text']), ('Xrd777/Events/BMD_Test|1:MND_001_0_0#0', '主人公', '……'))
+        self.process.blocks[self.WORKS] = b'\0' * 0x200        # the message closed: its work is freed
+        self.assertIsNone(engine.current())
+
+    def test_newest_work_on_screen_wins(self):
+        engine = self.engine()
+        self.show(work(self.COPY, self.page_at[0]), work(self.COPY, self.page_at[2], state=5))
+        engine.next_full = 0
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#0')
+        # the next message gets a work of its own; the old one is still there for a moment
+        self.show(work(self.COPY, self.page_at[0]), work(self.COPY, self.page_at[2], state=0))
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|1:MND_001_0_0#0')
+
+    def test_next_page_waits_until_shown(self):
+        # events: the next page's work exists early, marked as "next"; the line moves when it is shown
+        engine = self.engine()
+        white = 0xFFFFFFFF
+        self.show(work(self.COPY, self.page_at[0], colour=white), work(self.COPY, self.page_at[1], pending=True, colour=white))
+        engine.next_full = 0
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#0')
+        self.show(work(self.COPY, self.page_at[0], colour=white), work(self.COPY, self.page_at[1], colour=white))
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#1')
+        # connecting while both pages were already shown: the later page is the one on screen
+        fresh = self.engine()
+        fresh.next_full = 0
+        self.assertEqual(fresh.current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#1')
+
+    def test_field_next_page_uncoloured_until_shown(self):
+        # field messages: the next page's work has no colour yet
+        engine = self.engine()
+        self.show(work(self.COPY, self.page_at[0]), work(self.COPY, self.page_at[1], colour=0xFFFFFFFF))
+        engine.next_full = 0
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#0')
+        self.show(work(self.COPY, self.page_at[0]), work(self.COPY, self.page_at[1]))
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#1')
+
+    def test_next_message_elsewhere_found_right_away(self):
+        import time
+        engine = self.engine()
+        self.show(work(self.COPY, self.page_at[0]))
+        engine.next_full = 0
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#0')
+        engine.next_full, engine.last_full = time.monotonic() + 60, -1.0     # no scan due for a while
+        self.process.blocks[self.WORKS] = b'\0' * 0x200                     # that message ended…
+        self.process.blocks[0x60000000] = b'\0' * 0x40 + work(self.COPY, self.page_at[2]).ljust(0xA0, b'\0')   # …the next is elsewhere
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|1:MND_001_0_0#0')
+
+    def test_new_work_in_a_known_page_needs_no_full_scan(self):
+        import time
+        engine = self.engine()
+        self.show(work(self.COPY, self.page_at[0]))
+        engine.next_full = 0
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#0')
+        engine.next_full, engine.last_full = time.monotonic() + 60, time.monotonic()   # no full scan now
+        # the next page's work lands in another part of the same 64 KB page
+        self.process.blocks[self.WORKS + 0x8000] = b'\0' * 0x40 + work(self.COPY, self.page_at[1]).ljust(0xA0, b'\0')
+        self.assertEqual(engine.current()['key'], 'Xrd777/Events/BMD_Test|0:MSG_000_0_0#1')
+
+    def test_closed_or_finished_messages_are_not_shown(self):
+        engine = self.engine()
+        self.show(work(self.COPY, self.page_at[0], open_=False), work(self.COPY, self.page_at[2], state=5))
+        engine.next_full = 0
+        self.assertIsNone(engine.current())
+
+    def test_unknown_file_still_has_text(self):
+        engine = self.engine(file=None)
+        self.show(work(self.COPY, self.page_at[0]))
+        engine.next_full = 0
+        line = engine.current()
+        self.assertEqual((line['key'], line['text']), ('?|0:MSG_000_0_0#0', '〈主人公〉さん、おはよう。'))
+
+    def test_fingerprint_ignores_bilingual_line(self):
+        e = game_link.AtlusBmdEngine
+        self.assertEqual(e.japanese(self.pages[0]), e.japanese(ME + 'さん、おはよう。'.encode() + b'\r\n\0'))
+        self.assertEqual(e.first_line(self.pages[0]), 'さん、おはよう。'.encode())
+        self.assertEqual(e.first_line(self.pages[1]), e.first_line('もう寝よう…'.encode() + b'\n' + ZH + b'x\0'))
+
+    def test_work_must_point_into_a_message_file(self):
+        engine = self.engine()
+        self.show(work(0x50000000, 0x50000010))               # not a converted message file
+        engine.next_full = 0
+        self.assertIsNone(engine.current())
 
 
 class GameLinkSettings(unittest.TestCase):

@@ -16,6 +16,12 @@ Supported engines:
   field that points at it, verified by the script buffer ("Sv20").
   台本 rows: ``source`` "main", ``id`` = the engine's line number.
 
+* Atlus BMD (ペルソナ３ リロード, P3R.exe; Unreal Engine 4). Each page on screen has a small "message work"
+  that points at the loaded message file and the page; works are found by scanning small memory regions
+  (cheaply: first where works were seen before). game_link_index.json (beside the 台本, written by the game's
+  patch tool) says which file a loaded message file is.
+  台本 rows: ``source`` = message file, ``id`` = "<index>:<name>#<page>".
+
 * Kaleido (M2's Kaleido ADV Workshop with Squirrel scripts, 64-bit; tested with
   STEINS;GATE RE:BOOT, sgre_steam.exe). The scene player (class ScenePlayer in
   envplayer.nut) keeps the line on screen in two fields: curSceneName
@@ -31,6 +37,7 @@ prints each new line as you advance the game.
 """
 import argparse
 import ctypes
+import hashlib
 import json
 import os
 import re
@@ -160,6 +167,22 @@ class Process:
                     and (info.Type == MEM_PRIVATE or not private_only)):
                 yield base, size
             address = base + size
+
+    def committed(self, address, size):
+        """The readable, committed parts of [address, address + size) as (base, size)."""
+        info, end, parts, at = _MBI(), address + size, [], address
+        while at < end:
+            if not _kernel.VirtualQueryEx(self.handle, ctypes.c_void_p(at), ctypes.byref(info), ctypes.sizeof(info)):
+                break
+            base, length = info.BaseAddress or 0, info.RegionSize
+            if length <= 0:
+                break
+            if info.State == MEM_COMMIT and info.Protect & READABLE and not info.Protect & (PAGE_GUARD | UNCACHED):
+                lo, hi = max(at, base), min(end, base + length)
+                if hi > lo:
+                    parts.append((lo, hi - lo))
+            at = base + length
+        return parts
 
     def find(self, needle, aligned=1, limit=8):
         """Addresses where ``needle`` occurs in private memory."""
@@ -374,7 +397,336 @@ class KaleidoEngine:
 KaleidoEngine.PATTERN = re.compile(b''.join(
     re.escape(struct.pack('<I', KaleidoEngine.TYPES[slot])) + b'.{12}' if slot in KaleidoEngine.TYPES else b'.{16}'
     for slot in range(KaleidoEngine.FIRST, max(KaleidoEngine.TYPES) + 1)), re.S)
-ENGINES = (PalEngine, KaleidoEngine)
+
+
+class AtlusBmdEngine:
+    """Atlus message scripts in Unreal Engine 4 (ペルソナ３ リロード, P3R.exe).
+
+    To show a message the game converts its message file into a little-endian copy (header "MSG1",
+    self-relative offsets) and makes a small "message work" for the page it shows:
+        -9  0x28 while its message is open
+        -8  u64 1
+        +0  start of the copy
+        +8  start of the page (inside the copy)
+        +32 bytes 01 01 20 00, then the text colour (field messages: unset = FFFFFFFF until shown)
+        +44 u32 state: 0 for the pages of the open message
+        +52 bit 16 set: the next page, not shown yet
+    Works are made and freed message by message, so the engine finds them by scanning memory: every poll the
+    64 KB memory pages where works were seen before (cheap), and every few seconds all small regions (where the
+    game keeps small objects). Of the works on screen, the one that appeared or was shown last is the line.
+    Which file a copy came from is looked up in game_link_index.json (written beside the 台本 by the game's patch
+    tool): fingerprints of the message names and of each page's Japanese -> the file. A bilingual patch only
+    adds a line after the Japanese, so the fingerprints are the same with or without one.
+    台本 rows: ``source`` = the file ("Xrd777/Events/.../BMD_Event_Main_100_040_B"), ``id`` = "<index>:<name>#<page>".
+    """
+    name = 'Atlus BMD'
+    exes = ('p3r.exe',)
+    games = ('ペルソナ３ リロード',)
+    MARK = b'\x01\x01\x20\x00'               # 32 bytes after the (copy, page) pair of a message work
+    PATCH_MARK = b'\xfe\xf2\x01\x16\x01'     # colour 21: where a bilingual patch's added line starts
+    SMALL = 0x10000                          # full scans read only regions up to this size
+    PAGE = 0x10000                           # small objects live in 64 KB pages; works are remembered by page
+    WAITS = (1.0, 2.0, 3.0, 5.0)             # seconds between full scans while nothing is on screen
+    RESCAN = 5.0                             # ... and while something is (a new work may be in a new page)
+    SOONEST = 0.5                            # a full scan right away when the line on screen goes away
+    MAX_PAGES = 128
+    VARS = {(4, 1): '〈主人公〉', (4, 2): '〈主人公〉', (4, 3): '〈名前〉', (4, 4): '〈アイテム〉', (2, 4): '〈数〉',
+            (1, 3): '〈ボタン〉', (4, 30): '〈能力〉', (4, 31): '〈ランク〉'}
+
+    def __init__(self, process):
+        self.process = process
+        self.full_index, self.first_index = self.load_index()
+        self.parsed = {}                     # (copy start, first 64 bytes) -> parsed copy or None
+        self.pages = {}                      # 64 KB pages where works were seen -> last seen
+        self.works = {}                      # pair address -> (copy start, page start, shown, uncoloured, changed at)
+        self.next_full = 0.0
+        self.last_full = -1.0
+        self.misses = 0
+        self.shown_at = None                 # pair address of the line reported last
+        self.debug = bool(os.environ.get('GAME_LINK_DEBUG'))
+
+    # ---- the index written by the patch tool ----
+    @staticmethod
+    def index_folders():
+        here = os.path.dirname(os.path.abspath(__file__))
+        roots = [os.path.join(here, 'scripts'), os.path.join(here, 'data', 'reading', 'scripts'),
+                 os.path.join(here, 'saved_sentences', 'scripts')]
+        found = []
+        for root in roots:
+            if os.path.isdir(root):
+                found += [os.path.join(root, sub) for sub in sorted(os.listdir(root))]
+        try:
+            import script_library                   # scripts listed in scripts/paths.txt or JP_READER_SCRIPTS
+            found += [str(p) for p in script_library.folders()]
+        except Exception:
+            pass
+        return found
+
+    @classmethod
+    def load_index(cls):
+        full, first = {}, {}
+        for folder in cls.index_folders():
+            path = os.path.join(folder, 'game_link_index.json')
+            if not os.path.isfile(path):
+                continue
+            try:
+                with open(path, encoding='utf-8') as f:
+                    data = json.load(f)
+            except (OSError, ValueError):
+                continue
+            full.update(data.get('full', {}))
+            first.update(data.get('fingerprints', {}))
+        return full, first
+
+    @classmethod
+    def detect(cls, process):
+        """The engine for P3R.exe (message works appear once a message is shown)."""
+        try:
+            exe = re.split(r'[\\/]', process.image_path() or '')[-1].lower()
+        except AttributeError:
+            exe = ''
+        if exe not in cls.exes and not process.find(b'MSG1', limit=1):
+            return None
+        return cls(process)
+
+    def describe(self):
+        files = len(set(self.full_index.values()) | set(self.first_index.values()))
+        return f'索引 {files} 個台詞檔' if files else '找不到 game_link_index.json（請重新安裝台本）'
+
+    # ---- message text ----
+    @staticmethod
+    def tokens(raw):
+        """(kind, bytes) pieces of a page: 't' text run, 'f' function token, 'z' end."""
+        i, n = 0, len(raw)
+        while i < n:
+            b = raw[i]
+            if b == 0xFE and i + 1 < n and raw[i + 1] & 0xF0 == 0xF0:
+                size = 1 + (raw[i + 1] & 0x0F) * 2
+                yield 'f', raw[i:i + size]
+                i += size
+            elif b == 0:
+                yield 'z', b'\0'
+                return
+            else:
+                j = n
+                for stop in (raw.find(b'\0', i + 1), raw.find(b'\xfe', i + 1)):
+                    if stop != -1 and stop < j:
+                        j = stop
+                yield 't', raw[i:j]
+                i = j
+
+    @classmethod
+    def japanese(cls, raw):
+        """The Japanese bytes of a page: no control codes, up to a bilingual patch's line, no newline at the end."""
+        out = bytearray()
+        for kind, piece in cls.tokens(raw):
+            if kind == 'f' and piece == cls.PATCH_MARK:
+                break
+            if kind == 't':
+                out += piece
+        return bytes(out).rstrip(b'\r\n')
+
+    @classmethod
+    def first_line(cls, raw):
+        """The first line of a page's Japanese (at most 32 bytes)."""
+        out = bytearray()
+        for kind, piece in cls.tokens(raw):
+            if kind == 't':
+                cut = min((at for at in (piece.find(b'\n'), piece.find(b'\r')) if at != -1), default=-1)
+                if cut != -1:
+                    out += piece[:cut]
+                    break
+                out += piece
+                if len(out) >= 32:
+                    break
+        return bytes(out[:32])
+
+    @classmethod
+    def visible(cls, raw):
+        """Japanese of one page for reading: control codes removed, names as 〈…〉, a patch's added line dropped."""
+        out = bytearray()
+        for kind, piece in cls.tokens(raw):
+            if kind == 'f':
+                if piece == cls.PATCH_MARK:
+                    break
+                fid = piece[2] if len(piece) > 2 else 0
+                var = cls.VARS.get((fid >> 5, fid & 0x1F))
+                if var:
+                    out += var.encode('utf-8')
+            elif kind == 't':
+                out += piece
+        return out.decode('utf-8', 'replace').replace('\r', '').strip('\n').strip()
+
+    # ---- converted message files ----
+    def copy_at(self, start):
+        """(file, {page start: (index, name, page number, speaker)}, data) of the copy at ``start``, or None."""
+        head = self.process.read(start, 64)
+        if not head or len(head) < 64 or head[8:12] != b'MSG1':
+            return None
+        key = (start, head)
+        if key in self.parsed:
+            return self.parsed[key]
+        size, count = struct.unpack_from('<I', head, 4)[0], struct.unpack_from('<I', head, 0x18)[0]
+        result = None
+        data = self.process.read(start, size) if 32 < size < 0x800000 and count <= 5000 else None
+        if data and len(data) == size:
+            try:
+                result = self.parse_copy(data, start)
+            except (struct.error, ValueError, IndexError):
+                result = None
+        self.parsed[key] = result
+        if len(self.parsed) > 64:
+            self.parsed.pop(next(iter(self.parsed)))
+        return result
+
+    @staticmethod
+    def page_ends(data, head, starts):
+        """Where each page ends: the next page of the message; the last one by the text size after the page
+        table (stored little- or big-endian, so both are tried), else at its 0 terminator."""
+        if not starts:
+            return []
+        at = head + 4 * len(starts)
+        for size in struct.unpack_from('<I', data, at)[0], struct.unpack_from('>I', data, at)[0]:
+            end = at + 4 + size
+            if starts[-1] < end <= len(data):
+                return starts[1:] + [end]
+        zero = data.find(b'\0', starts[-1])
+        return starts[1:] + [zero + 1 if zero != -1 else len(data)]
+
+    def parse_copy(self, data, base):
+        ptr = lambda at: at + struct.unpack_from('<I', data, at)[0]
+        count = struct.unpack_from('<I', data, 0x18)[0]
+        dialogs = []
+        for k in range(count):
+            kind = struct.unpack_from('<I', data, 0x20 + 8 * k)[0]
+            o = ptr(0x20 + 8 * k + 4)
+            name = data[o:o + 24].split(b'\0')[0]
+            if kind == 0:
+                pages, speaker = struct.unpack_from('<HH', data, o + 24)
+                head = o + 28
+            else:
+                pages, speaker, head = struct.unpack_from('<H', data, o + 26)[0], 0xFFFF, o + 32
+            starts = [ptr(head + 4 * j) for j in range(pages)]
+            dialogs.append((k, name, starts, self.page_ends(data, head, starts), speaker))
+        full, first = hashlib.sha1(), hashlib.sha1()
+        where = {}
+        so = 0x20 + 8 * count
+        names_at, names = ptr(so), struct.unpack_from('<I', data, so + 4)[0]
+        speakers = [data[ptr(names_at + 4 * k):data.index(b'\0', ptr(names_at + 4 * k))] for k in range(min(names, 2000))]
+        for k, name, starts, ends, speaker in dialogs:
+            full.update(name + b'|')
+            first.update(name + b'|')
+            for j, (a, b) in enumerate(zip(starts, ends)):
+                page = data[a:b]
+                full.update(self.japanese(page) + b'#')
+                first.update(self.first_line(page) + b'#')
+                who = self.visible(speakers[speaker] + b'\0') if speaker < len(speakers) else ''
+                where[base + a] = (k, name.decode('ascii', 'replace'), j, who, b - a)
+        file = self.full_index.get(full.hexdigest()) or self.first_index.get(first.hexdigest())
+        return file, where, data
+
+    def line(self, start, page):
+        copy = self.copy_at(start)
+        if not copy:
+            return None
+        file, where, data = copy
+        found = where.get(page)
+        if not found:
+            return None
+        k, name, j, who, size = found
+        text = self.visible(data[page - start:page - start + size])
+        key = f'{file}|{k}:{name}#{j}' if file else f'?|{k}:{name}#{j}'
+        short = (file or '?').rsplit('/', 1)[-1]
+        return {'key': key, 'label': f'{short} {name}#{j}', 'number': k, 'text': text, 'speaker': who}
+
+    # ---- finding message works ----
+    def works_in(self, base, data):
+        """{pair address: (copy start, page start, on screen, look)} of the message works in ``data``."""
+        found = {}
+        i = data.find(self.MARK)
+        while i != -1:
+            at = base + i - 32
+            if i >= 48 and at % 8 == 0 and i + 24 <= len(data):
+                one, start, page = struct.unpack_from('<QQQ', data, i - 40)
+                if one == 1 and 0x10000 < start < page < start + 0x800000:
+                    live = data[i - 41] == 0x28                                  # set while its message is open
+                    state, = struct.unpack_from('<I', data, i + 12)            # 0 = this page is shown or next
+                    pending = bool(struct.unpack_from('<I', data, i + 20)[0] & 0x10000)   # next page, not shown yet
+                    white = struct.unpack_from('<I', data, i + 4)[0] == 0xFFFFFFFF      # colour not set (yet)
+                    found[at] = (start, page, live and state == 0 and not pending, white)
+            i = data.find(self.MARK, i + 1)
+        return found
+
+    def scan_known(self):
+        """Works in the pages where works were seen before (their committed parts)."""
+        found = {}
+        committed = getattr(self.process, 'committed', None)
+        for page in list(self.pages):
+            for base, size in (committed(page, self.PAGE) if committed else [(page, self.PAGE)]):
+                data = self.process.read(base, size)
+                if data:
+                    found.update(self.works_in(base, data))
+        return found
+
+    def scan_all(self, now):
+        """Works in all small memory regions; remembers their pages."""
+        found = {}
+        for base, size in self.process.regions():
+            if size > self.SMALL:
+                continue
+            data = self.process.read(base, size)
+            if not data:
+                continue
+            here = self.works_in(base, data)
+            if here:
+                found.update(here)
+                for at in here:
+                    self.pages[at & ~(self.PAGE - 1)] = now
+        if len(self.pages) > self.MAX_PAGES:
+            for page in sorted(self.pages, key=self.pages.get)[:len(self.pages) - self.MAX_PAGES]:
+                del self.pages[page]
+        return found
+
+    def current(self):
+        """The line on screen: {'key', 'label', 'number', 'text', 'speaker'} or None.
+
+        Works on screen: open, state 0 and not waiting as the next page. The one that last appeared, moved to
+        another page or became shown is the line; field messages keep the next page's work uncoloured until it is
+        shown, so an uncoloured work does not count while another work of the same file is coloured."""
+        now = time.monotonic()
+        found = self.scan_known()
+        gone = self.shown_at is not None and not (found.get(self.shown_at) or (0, 0, False))[2]
+        if now >= self.next_full or (gone and now - self.last_full >= self.SOONEST):
+            before = len(self.pages)
+            found.update(self.scan_all(now))
+            self.last_full = now
+            if self.debug:
+                print(f'[atlus] full scan {time.monotonic() - now:.2f}s{" (line gone)" if gone else ""}: {len(found)} works, '
+                      f'{len(self.pages) - before} new pages, {len(self.pages)} known', flush=True)
+            showing = any(w[2] for w in found.values())
+            self.misses = 0 if showing else self.misses + 1
+            wait = self.RESCAN if showing else self.WAITS[min(self.misses, len(self.WAITS)) - 1]
+            self.next_full = time.monotonic() + wait
+        works = {}
+        for at, (start, page, shown, white) in found.items():
+            old = self.works.get(at)
+            same = old and old[:4] == (start, page, shown, white)
+            works[at] = (start, page, shown, white, old[4] if same else now)
+        self.works = works
+        coloured = {w[0] for w in works.values() if w[2] and not w[3]}
+        on = sorted((w[4], w[1], at) for at, w in works.items() if w[2] and not (w[3] and w[0] in coloured))
+        for _, _, at in reversed(on):
+            line = self.line(*works[at][:2])
+            if line:
+                if self.debug and at != self.shown_at:
+                    print(f'[atlus] line from work {at:x} ({len(on)} on screen)', flush=True)
+                self.shown_at = at
+                return line
+        self.shown_at = None
+        return None
+
+
+ENGINES = (PalEngine, KaleidoEngine, AtlusBmdEngine)
 TAGS = re.compile(r'<r[^<>]*>|</r>|</?d\d*>|</?s\d*>|<[^<>]{0,40}>')
 
 
@@ -432,7 +784,7 @@ class Link:
                 break
         if not self.engine:
             self.process.close()
-            raise LinkError('這個遊戲還不能直接讀取（目前支援：Pal 引擎、M2 Kaleido 引擎，例如 STEINS;GATE RE:BOOT）。'
+            raise LinkError('這個遊戲還不能直接讀取（目前支援：Pal 引擎、M2 Kaleido 引擎（STEINS;GATE RE:BOOT）、Atlus BMD（ペルソナ３ リロード））。'
                             '如果遊戲還在啟動，等標題畫面出現後會自動再試。')
 
     @property
@@ -449,6 +801,12 @@ class Link:
 
     def close(self):
         self.process.close()
+
+
+def _letters(text):
+    """Letters and digits only (the Reader compares a game line with a 台本 row the same way)."""
+    import unicodedata
+    return ''.join(c for c in unicodedata.normalize('NFKC', text) if c.isalnum())
 
 
 def main():
@@ -494,7 +852,12 @@ def main():
                 last = key
                 if line:
                     text = line['text'] or rows.get(key, {}).get('ja', '（台本裡沒有這句）' if rows else '')
-                    say(f"{line['label']}  [{line['speaker'] or '旁白'}]  {text}".replace('\n', ' / '))
+                    mark = ''
+                    if rows:
+                        row = rows.get(key)
+                        same = row and (not line['text'] or _letters(row.get('ja', '')) == _letters(line['text']))
+                        mark = '✓ ' if same else ('✗ 台本的日文不同 ' if row else '✗ 台本裡沒有 ')
+                    say(f"{mark}{line['label']}  [{line['speaker'] or '旁白'}]  {text}".replace('\n', ' / '))
             time.sleep(0.1)
     except LinkError as error:
         say(str(error))
