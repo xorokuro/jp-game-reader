@@ -1011,6 +1011,9 @@
  load();
  // Paint colours immediately (before layout scripts) to avoid a flash of the wrong palette.
  apply(false);
+ // The reader server paints dictionary entries in the saved entry colours (no flash while an
+ // entry opens), so keep those in step with the palette actually in use.
+ try{const colors=JSON.stringify(entryColors());if(localStorage.getItem(ENTRY_KEY)!==colors)localStorage.setItem(ENTRY_KEY,colors);}catch{}
  const ready=()=>{build();drawer();apply(false);};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ready);else ready();
 })();

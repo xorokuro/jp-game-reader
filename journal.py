@@ -516,6 +516,15 @@ def main():
             if not restart.is_set():
                 with lock:state['status']='OCR stopped. '+state['status']
                 break
+    ENTRY_SHEET=b'<link rel="stylesheet" href="/dictionary-entry.css">'
+    def styled_entry(raw):
+        # Dictionary entries carry their reader stylesheet inline: saved colours, text size and
+        # typeface included. The first paint is then the final one; no extra request, no flash.
+        if ENTRY_SHEET not in raw:return raw
+        import preferences
+        try:css=(HERE/'dictionary-entry.css').read_bytes()+preferences.entry_theme_css(preferences_path)+preferences.entry_view_css(preferences_path)
+        except OSError:return raw
+        return raw.replace(ENTRY_SHEET,b'<style>'+css.replace(b'</',b'<\\/')+b'</style>',1)
     class Handler(BaseHTTPRequestHandler):
         def send(self,obj,status=200,mime='application/json; charset=utf-8'):
             raw=obj if isinstance(obj,bytes) else json.dumps(obj,ensure_ascii=False).encode('utf-8');self.send_response(status);self.send_header('Content-Type',mime);self.send_header('Content-Length',str(len(raw)));self.send_header('Cache-Control','no-store');self.send_header('X-Content-Type-Options','nosniff');self.send_header('Content-Security-Policy',"default-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; frame-ancestors 'self'" if self.path.startswith(('/api/dictionary/entry','/api/dictionary/resolve')) else "frame-ancestors 'self'");self.end_headers();self.wfile.write(raw)
@@ -579,10 +588,10 @@ def main():
                     return self.send({'dictionaries':local_dictionary.catalog(),'yomitan':local_dictionary.catalog_status()})
                 if p=='/api/dictionary/resolve':
                     raw=local_dictionary.resolve(query['code'][0],query['word'][0])
-                    return self.send(raw,mime='text/html; charset=utf-8')
+                    return self.send(styled_entry(raw),mime='text/html; charset=utf-8')
                 if p=='/api/dictionary/entry':
                     raw=local_dictionary.entry(query['code'][0],int(query['id'][0]),query.get('anchor',[''])[0])
-                    return self.send(raw,mime='text/html; charset=utf-8')
+                    return self.send(styled_entry(raw),mime='text/html; charset=utf-8')
                 if p=='/api/dictionary/labels':
                     ids=[i for i in query.get('ids',[''])[0].split(',') if i.strip()]
                     return self.send({'labels':local_dictionary.labels(query['code'][0],ids)})

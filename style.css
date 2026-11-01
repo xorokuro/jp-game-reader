@@ -88,12 +88,17 @@ body>*{position:relative;z-index:1}
  100%{transform:translate3d(var(--drift),calc(-100vh - 60px),0) scale(1.05);opacity:0}
 }
 .no-falling #falling{display:none}
+/* While the scripts arrange the page (index.html, a fraction of a second), show only the paper. */
+html.booting :is(.topbar,.shell){opacity:0}
+/* Paper grain. Plain alpha blending, deliberately not mix-blend-mode: Chromium flickers when a
+   page combines mix-blend-mode with backdrop-filter blur (the top bar), and on light paper the
+   two blends look the same at this strength. */
 body::after{
  content:"";position:fixed;inset:0;z-index:90;pointer-events:none;
- opacity:var(--grain-opacity);mix-blend-mode:multiply;
+ opacity:var(--grain-opacity);
  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .45 0 0 0 0 .38 0 0 0 0 .3 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E");
 }
-:root[data-mode="dark"] body::after{mix-blend-mode:screen;opacity:.28}
+:root[data-mode="dark"] body::after{opacity:.28}
 .no-grain body::after{display:none}
 
 /* 3. Top bar --------------------------------------------------------------- */

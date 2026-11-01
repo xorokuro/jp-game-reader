@@ -170,13 +170,16 @@ body.ws-resizing iframe{pointer-events:none}
 
 .dict-main{display:flex;flex-direction:column;min-height:0;min-width:0}
 .dict-frame-wrap{position:relative;flex:1;min-height:280px}
-#dict-frame{
- display:block;width:100%;height:100%;
+/* Two entry frames take turns (dictionary.js): the next entry loads, hidden, in exactly the same
+   box as the shown one (#dict-frame), and replaces it only when it is complete. */
+.dict-frame-wrap>iframe{
+ position:absolute;inset:0;display:block;width:100%;height:100%;
  background:var(--card);
  border:1.5px solid var(--line-strong);
  border-radius:var(--wobble-sm);
  box-shadow:inset 0 2px 0 color-mix(in srgb,var(--ink) 4%,transparent);
 }
+.dict-frame-wrap>iframe.dict-frame-next{visibility:hidden;pointer-events:none}
 .dict-empty{
  position:absolute;inset:0;display:none;
  flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;text-align:center;

@@ -32,7 +32,7 @@
   panel.querySelector('#dict-close').innerHTML=(window.readerIcon?readerIcon('x'):'');
   panel.querySelector('#dict-help>summary').innerHTML=(window.readerIcon?readerIcon('help'):'');
   const helpBody=panel.querySelector('#dict-help .dict-pop-body');helpBody.append(selectionHint);
-  const audioNote=document.createElement('p');audioNote.className='muted';audioNote.textContent='辭典內建的真人發音會以播放器顯示在詞條中；「朗讀」使用瀏覽器的合成語音。Recorded pronunciations appear inside entries; Read aloud uses a browser voice.';helpBody.append(audioNote);
+  const audioNote=document.createElement('p');audioNote.className='muted';audioNote.textContent='辭典內建的真人發音會以播放器顯示在詞條中，按整個發音框（不只 ▶）就會播放；「朗讀」使用瀏覽器的合成語音。Recorded pronunciations appear inside entries — click anywhere on the pronunciation box to play; Read aloud uses a browser voice.';helpBody.append(audioNote);
   const emptyNote=panel.querySelector('#dict-empty');
   function setEmpty(title,text){emptyNote.querySelector('b').textContent=title;emptyNote.querySelector('span').textContent=text;}
   for(const pop of panel.querySelectorAll('.dict-pop'))pop.addEventListener('toggle',()=>{if(pop.open)for(const other of panel.querySelectorAll('.dict-pop'))if(other!==pop)other.open=false;});
@@ -130,9 +130,15 @@
       tabs.append(b);
     });
     const first=visible.find(d=>d.code===currentCode)||visible.find(d=>d.entries.length)||visible[0];
-    if(first)choose(first);else{currentCode='';tabs.append(entries);entries.textContent='No dictionaries selected. Open “Choose dictionaries” to enable one.';frame.removeAttribute('src');setEmpty('還沒有選擇辭典','按上方的清單圖示選擇要查的辭典 · Open the list icon to choose dictionaries.');}
+    if(first)choose(first);else{currentCode='';tabs.append(entries);entries.textContent='No dictionaries selected. Open “Choose dictionaries” to enable one.';clearEntry();setEmpty('還沒有選擇辭典','按上方的清單圖示選擇要查的辭典 · Open the list icon to choose dictionaries.');}
   }
-  const tabs=document.getElementById('dict-tabs'),entries=document.getElementById('dict-entries'),frame=document.getElementById('dict-frame');
+  const tabs=document.getElementById('dict-tabs'),entries=document.getElementById('dict-entries');
+  // Two entry frames take turns: the next entry loads out of sight in the spare frame and replaces
+  // the shown one only once it is complete (styled, sized, scrolled). A lookup therefore never
+  // blanks, half-draws or re-sizes the definition on screen. #dict-frame is always the shown one.
+  let frame=document.getElementById('dict-frame'),spareFrame=frame.cloneNode(false),pendingEntry='',earlyShow=0;
+  spareFrame.removeAttribute('id');spareFrame.classList.add('dict-frame-next');spareFrame.setAttribute('aria-hidden','true');spareFrame.tabIndex=-1;
+  frame.after(spareFrame);
   // Each search owns its entry positions, so Back/Forward restore that visit.
   let navigation={positions:new Map(),entries:new Map()},loadedEntry=null;
   const entryKey=(code,row)=>JSON.stringify([code,String(row.id),row.anchor||'']);
@@ -155,9 +161,9 @@
   zoomOut.textContent='A−';zoomOut.setAttribute('aria-label','Shrink dictionary text');
   zoomIn.textContent='A+';zoomIn.setAttribute('aria-label','Enlarge dictionary text');
   zoomReset.title='Reset dictionary zoom to 100%';
-  function applyDictionaryZoom(){
+  function applyDictionaryZoom(target=frame){
     zoomReset.textContent=dictionaryZoom+'%';zoomOut.disabled=dictionaryZoom<=70;zoomIn.disabled=dictionaryZoom>=200;
-    try{if(frame.contentDocument?.body)frame.contentDocument.body.style.setProperty('zoom',dictionaryZoom/100,'important');}catch{}
+    try{if(target.contentDocument?.body)target.contentDocument.body.style.setProperty('zoom',dictionaryZoom/100,'important');}catch{}
   }
   function changeDictionaryZoom(value){dictionaryZoom=Math.max(70,Math.min(200,value));try{localStorage.setItem('fortune-dictionary-zoom',String(dictionaryZoom));}catch{}applyDictionaryZoom();}
   zoomOut.onclick=()=>changeDictionaryZoom(dictionaryZoom-10);zoomIn.onclick=()=>changeDictionaryZoom(dictionaryZoom+10);zoomReset.onclick=()=>changeDictionaryZoom(100);
@@ -165,11 +171,11 @@
   let dictionaryFont='serif';
   try{if(localStorage.getItem('jp-reader-dict-font')==='sans')dictionaryFont='sans';}catch{}
   const fontToggle=document.createElement('button');fontToggle.type='button';fontToggle.className='dict-font-toggle';
-  function applyDictionaryFont(){
+  function applyDictionaryFont(target=frame){
     fontToggle.textContent=dictionaryFont==='sans'?'ゴ':'明';
     fontToggle.title=dictionaryFont==='sans'?'辭典字體：黑體（按一下改為明朝）· Gothic':'辭典字體：明朝（按一下改為黑體）· Serif';
     fontToggle.setAttribute('aria-label','Dictionary typeface: '+(dictionaryFont==='sans'?'gothic':'serif'));
-    try{const root=frame.contentDocument?.documentElement;if(root)root.dataset.font=dictionaryFont;}catch{}
+    try{const root=target.contentDocument?.documentElement;if(root)root.dataset.font=dictionaryFont;}catch{}
   }
   fontToggle.onclick=()=>{dictionaryFont=dictionaryFont==='sans'?'serif':'sans';try{localStorage.setItem('jp-reader-dict-font',dictionaryFont);}catch{}applyDictionaryFont();};
   zoomControls.append(zoomOut,zoomReset,zoomIn,fontToggle);applyDictionaryFont();panel.querySelector('.dict-toolbar').prepend(zoomControls);applyDictionaryZoom();
@@ -353,24 +359,67 @@
       }).observe(doc.documentElement,{childList:true,subtree:true});
     }catch{}
   }
-  frame.addEventListener('load',()=>{
+  // Pronunciation boxes: in an entry, the little card around a recording (the NHK accent card
+  // 「キ＼ビキビ ▶」, each cell of its conjugation table, …) plays it when clicked anywhere, not
+  // only on ▶. The card is the nearest box around the player that holds this one recording and a
+  // few words of text; a whole definition never counts. Dragging still selects text for lookup.
+  function audioBox(audio){
+    const doc=audio.ownerDocument,view=doc.defaultView||window;
+    for(let box=audio.parentElement,level=0;box&&box!==doc.body&&box!==doc.documentElement&&level<4;box=box.parentElement,level++){
+      if(box.querySelectorAll('audio').length!==1)return null;
+      const text=(box.textContent||'').trim();
+      if(text.length>40)return null;
+      const display=view.getComputedStyle(box).display;
+      if(text&&display!=='inline'&&display!=='contents')return box;
+    }
+    return null;
+  }
+  function enableAudioBoxes(doc){
+    const boxes=new Map();
+    for(const audio of doc.querySelectorAll('audio')){
+      const box=audioBox(audio);if(!box||boxes.has(box))continue;
+      boxes.set(box,audio);box.classList.add('reader-audio-box');
+      const playing=()=>box.classList.toggle('reader-audio-playing',!audio.paused&&!audio.ended);
+      for(const type of ['play','pause','ended','emptied'])audio.addEventListener(type,playing);
+    }
+    if(!boxes.size)return;
+    doc.addEventListener('click',event=>{
+      if(event.button!==0||event.detail>1||event.defaultPrevented)return;
+      const target=event.target;
+      if(!target?.closest||target.closest('audio,a,button,input,select,textarea,summary,[contenteditable]'))return;
+      const box=target.closest('.reader-audio-box'),audio=box&&boxes.get(box);
+      if(!audio)return;
+      const selection=doc.getSelection();
+      if(selection&&!selection.isCollapsed)return;   // the click ended a drag that selected text
+      for(const other of boxes.values())if(other!==audio&&!other.paused)other.pause();
+      if(!audio.paused)audio.currentTime=0;           // clicking again starts the word over
+      audio.play()?.catch?.(()=>{
+        // If the browser will not start it inside the entry, play the same recording from here.
+        const src=audio.currentSrc||audio.src;if(src)new Audio(src).play().catch(()=>{});
+      });
+    });
+  }
+  function setUpEntry(incoming){
     // Entries stay sandboxed; the parent can read selections in local documents.
-    let entryDocument;try{entryDocument=frame.contentDocument;}catch{return;}
-    if(!entryDocument||entryDocument.URL!==frame.src||!currentEntry)return;
-    try{const code=new URL(frame.src,location.href).searchParams.get('code');if(code&&entryDocument.body)entryDocument.body.dataset.dict=code;}catch{}
-    applyDictionaryFont();
-    applyDictionaryZoom();
-    window.readerTheme?.themeFrame(frame);
+    let entryDocument;try{entryDocument=incoming.contentDocument;}catch{return;}
+    if(!entryDocument||entryDocument.URL!==incoming.src||!currentEntry)return;
+    if(incoming!==frame&&entryDocument.URL!==pendingEntry)return;      // overtaken by a later lookup
+    if(entryDocument.__readerEntry)return;entryDocument.__readerEntry=true;
+    try{const code=new URL(incoming.src,location.href).searchParams.get('code');if(code&&entryDocument.body)entryDocument.body.dataset.dict=code;}catch{}
+    applyDictionaryFont(incoming);
+    applyDictionaryZoom(incoming);
+    window.readerTheme?.themeFrame(incoming);
     if(window.readerShortcutKeydown)entryDocument.addEventListener('keydown',window.readerShortcutKeydown);
     // Scroll only the embedded document. URL fragments can also scroll its
     // containing page when the browser brings the target into view.
-    const anchor=new URL(frame.src,location.href).searchParams.get('anchor');
+    const anchor=new URL(incoming.src,location.href).searchParams.get('anchor');
     const target=anchor&&(entryDocument.getElementById(anchor)||entryDocument.getElementsByName(anchor)[0]);
-    const innerWindow=frame.contentWindow;
+    const innerWindow=incoming.contentWindow;
     const key=entryKey(currentCode,currentEntry),position=navigation.positions.get(key);
     if(innerWindow)innerWindow.scrollTo({top:position?.y??(target?target.getBoundingClientRect().top+innerWindow.scrollY:0),left:position?.x??0,behavior:'instant'});
     loadedEntry={doc:entryDocument,key,owner:navigation};
     enableSelectionSearch(entryDocument,true);
+    enableAudioBoxes(entryDocument);
     entryDocument.addEventListener('click',event=>{
       const link=event.target.closest?.('a[data-lookup],a[data-external]');
       if(!link)return;
@@ -390,7 +439,28 @@
     entryDocument.addEventListener('selectionchange',useSelection);
     entryDocument.addEventListener('pointerup',useSelection);
     entryDocument.addEventListener('keyup',useSelection);
-  });
+    if(incoming!==frame)showEntryFrame(incoming);
+  }
+  // Swap in one step: the finished entry becomes #dict-frame, the old one goes out of sight and empties.
+  function showEntryFrame(incoming){
+    const previous=frame,focused=document.activeElement===previous;
+    pendingEntry='';clearTimeout(earlyShow);
+    incoming.id='dict-frame';incoming.classList.remove('dict-frame-next');incoming.removeAttribute('aria-hidden');incoming.removeAttribute('tabindex');
+    previous.removeAttribute('id');previous.classList.add('dict-frame-next');previous.setAttribute('aria-hidden','true');previous.tabIndex=-1;
+    frame=incoming;spareFrame=previous;
+    if(focused)try{incoming.focus({preventScroll:true});}catch{}
+    previous.removeAttribute('src');   // stops its audio and frees it; it is hidden already
+  }
+  function loadEntry(url){
+    pendingEntry=new URL(url,location.href).href;
+    spareFrame.src=url;
+    // Normally the entry is shown on load. Should many pictures hold that back, show it once its
+    // text is in (pictures then fill in as before).
+    clearTimeout(earlyShow);
+    earlyShow=setTimeout(()=>{try{const doc=spareFrame.contentDocument;if(doc?.URL===pendingEntry&&doc.readyState!=='loading')setUpEntry(spareFrame);}catch{}},350);
+  }
+  function clearEntry(){pendingEntry='';clearTimeout(earlyShow);frame.removeAttribute('src');}
+  for(const entryFrame of [frame,spareFrame])entryFrame.addEventListener('load',()=>setUpEntry(entryFrame));
   let requestVersion=0,spokenWord='';
   const searchHistory=[],forwardHistory=[];
   let searchPending=false,currentEntry=null;
@@ -441,7 +511,7 @@
     rememberEntryPosition();loadedEntry=null;
     currentEntry=row;navigation.entries.set(dictionary.code,row);
     const params=new URLSearchParams({code:dictionary.code,id:row.id,anchor:row.anchor||''});
-    frame.src='/api/dictionary/entry?'+params;
+    loadEntry('/api/dictionary/entry?'+params);
     [...entries.children].forEach(b=>b.classList.toggle('active',b.dataset.entry===String(row.id)+'#'+row.anchor));
   }
   function choose(dictionary){
@@ -449,11 +519,13 @@
     currentEntry=null;
     currentCode=dictionary.code;
     [...tabs.children].forEach(b=>{const selected=b.dataset.code===dictionary.code;b.classList.toggle('active',selected);b.setAttribute('aria-pressed',String(selected));});
-    entries.replaceChildren();frame.removeAttribute('src');
+    // The frame keeps showing the previous entry until the next one is ready: dropping src here
+    // would blank it to about:blank first (a flash) when an entry follows right away.
+    entries.replaceChildren();
     const activeTab=[...tabs.children].find(b=>b.dataset?.code===dictionary.code);if(activeTab)activeTab.after(entries);else tabs.append(entries);
     entries.classList.toggle('single',dictionary.entries.length===1);entries.classList.toggle('kanji-list',dictionary.kind==='kanji');entries.classList.remove('collapsed');if(activeTab){activeTab.setAttribute('aria-expanded','true');activeTab.title=activeTab.title.replace(/ · 再按一次收合.*$/,'')+' · 再按一次收合／展開';}
-    if(dictionary.error){entries.textContent='Dictionary error: '+dictionary.error;setEmpty('這本辭典出錯了',dictionary.error);return;}
-    if(!dictionary.entries.length){entries.textContent='No matches in this dictionary.';setEmpty('這本辭典查不到「'+spokenWord+'」','按 A / D 換一本有結果的辭典 · Press A / D for the next dictionary with results.');return;}
+    if(dictionary.error){clearEntry();entries.textContent='Dictionary error: '+dictionary.error;setEmpty('這本辭典出錯了',dictionary.error);return;}
+    if(!dictionary.entries.length){clearEntry();entries.textContent='No matches in this dictionary.';setEmpty('這本辭典查不到「'+spokenWord+'」','按 A / D 換一本有結果的辭典 · Press A / D for the next dictionary with results.');return;}
     dictionary.entries.forEach(row=>{
       const b=document.createElement('button');b.type='button';b.dataset.entry=String(row.id)+'#'+row.anchor;b.dataset.id=String(row.id);
       drawEntryLabel(b,row,entryLabels.get(dictionary.code+':'+row.id));

@@ -56,3 +56,20 @@ def entry_theme_css(path):
     rules=[f'--e-{k}:{theme[k]};' for k in ENTRY_COLORS if isinstance(theme.get(k),str) and re.fullmatch(r'#[0-9a-fA-F]{6}',theme[k])]
     if theme.get('scheme') in ('light','dark'):rules.append(f"color-scheme:{theme['scheme']};")
     return ('\n:root{'+''.join(rules)+'}\n').encode('ascii') if rules else b''
+
+
+def entry_view_css(path):
+    """The dictionary's text size (A−/A+) and typeface (明/ゴ), so an entry opens at its final size.
+
+    The reader page applies both again once the entry has loaded; matching values here mean
+    that step changes nothing on screen (before, every entry jumped from 100% to the saved size)."""
+    try:values=json.loads(path.read_text(encoding='utf-8'))
+    except (OSError,ValueError):return b''
+    if not isinstance(values,dict):return b''
+    rules=[]
+    try:zoom=int(values.get('fortune-dictionary-zoom') or 100)
+    except (TypeError,ValueError):zoom=100
+    if 70<=zoom<=200 and zoom!=100:rules.append(f'body{{zoom:{zoom/100:g}}}')
+    # Until the page sets data-font itself; its own :root[data-font] rules take over from then on.
+    if values.get('jp-reader-dict-font')=='sans':rules.append(':root:not([data-font]){--e-font:var(--e-sans)}')
+    return ('\n'+'\n'.join(rules)+'\n').encode('ascii') if rules else b''

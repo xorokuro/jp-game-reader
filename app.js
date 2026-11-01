@@ -423,10 +423,11 @@ async function poll(){
    if(following&&!startupBlank){navSeq=recent[0]?.seq;showCurrent(liveRecord);}
    else if(currentId&&!currentRecord?.localDraft&&(!currentRecord||s.version!==version)){const row=await api('sentence?id='+currentId);if(row)showCurrent(row);else{following=true;navSeq=recent[0]?.seq;rememberPin();showCurrent(liveRecord);}}
    updateNavigation();
+   window.readerBoot?.done('poll');   // first state shown: the page can appear (index.html)
    if(s.version!==version){await loadPage();if(!dirty())version=s.version;}
   }
  }catch(e){$('status').textContent=reached?'畫面更新出錯，會自動再試：'+e.message:'連不到 Reader 程式（它的黑色視窗可能被關掉了）：請雙擊 Start Reader.cmd，再按 F5。';}
- finally{if(!stopped)setTimeout(poll,document.body.dataset.inputMode==='game'&&!paused?400:1500);}
+ finally{window.readerBoot?.done('poll');if(!stopped)setTimeout(poll,document.body.dataset.inputMode==='game'&&!paused?400:1500);}
 }
 $('editcurrent').onclick=()=>action(async()=>{
  if(dirty())throw Error('請先儲存編輯內容。');if(!currentRecord)return;

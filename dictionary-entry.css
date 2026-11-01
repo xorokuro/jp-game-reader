@@ -147,6 +147,11 @@ body :is(accent_text,con_table>accent){display:inline-flex;align-items:center;ga
 body con_table{display:flex;flex-wrap:wrap;gap:8px;margin-top:.8em}
 body con_table>accent{font-size:1.02em!important;padding:4px 10px;border:1px solid var(--e-border)!important;border-radius:10px}
 body :is(symbol_backslash,symbol_macron){color:var(--e-num)!important;font-weight:700!important}
+/* Pronunciation boxes (marked by the reader page): the whole card plays its recording. */
+body .reader-audio-box{cursor:pointer;transition:box-shadow .15s ease}
+body .reader-audio-box:hover{box-shadow:0 0 0 2px color-mix(in srgb,var(--e-strong) 28%,transparent)!important}
+body .reader-audio-box:active{box-shadow:0 0 0 2px color-mix(in srgb,var(--e-strong) 50%,transparent)!important}
+body .reader-audio-box.reader-audio-playing{box-shadow:0 0 0 2px color-mix(in srgb,var(--e-strong) 60%,transparent)!important}
 
 /* 6. Dictionaries whose markup needs a nudge. ------------------------------------------------------ */
 body[data-dict="MDX_NEW_12ACC0F4"] .header{display:block;font-size:1.55em;font-weight:700;margin-bottom:.6em}

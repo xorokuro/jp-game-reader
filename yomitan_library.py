@@ -599,10 +599,12 @@ def _glossary(items, code):
 
 
 def _page(code, title, name, body, lang='ja'):
-    return ('<!doctype html><html lang="' + lang + '"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+    # The stylesheet sits in <head> so the first paint is already styled (no flash per lookup).
+    return ('<!doctype html><html lang="' + lang + '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+            '<link rel="stylesheet" href="/dictionary-entry.css"></head>'
             '<body class="mdict-entry yomitan-entry" data-dict="' + html.escape(code, quote=True) + '">'
             '<div class="dictionary-source">' + html.escape(name) + ' · ' + html.escape(title) + '</div>' + body +
-            '<link rel="stylesheet" href="/dictionary-entry.css"></body></html>').encode('utf-8')
+            '</body></html>').encode('utf-8')
 
 
 def _info(db, code):

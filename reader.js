@@ -133,7 +133,7 @@
       hint.textContent=activeMode==='paste'?'Ready for pasted text. Capture is paused.':activeMode==='game'?'已選擇遊戲：開始跟隨。遊戲每換一句，這裡就顯示同一句的日文＋中文。':'Source selected. Press Recognize when ready, or enable automatic recognition.';
     }finally{apply.disabled=false;}
   });
-  api('state').then(async state=>{mode.value=state.settings.capture_mode||'paste';applyMode(mode.value);showSource();if(mode.value==='window'||mode.value==='game')await listWindows(state.settings.window_handle);}).catch(error=>hint.textContent=error.message);
+  api('state').then(async state=>{mode.value=state.settings.capture_mode||'paste';applyMode(mode.value);showSource();window.readerBoot?.done('state');if(mode.value==='window'||mode.value==='game')await listWindows(state.settings.window_handle);}).catch(error=>hint.textContent=error.message).finally(()=>window.readerBoot?.done('state'));
 })();
 
 // Reading first: reader and dictionary side by side, setup tiles below.
@@ -217,7 +217,9 @@
   if(rightPad.style.height!==r)rightPad.style.height=r;
  }
  const schedule=()=>{if(!frame)frame=requestAnimationFrame(align);};
- const observer=new ResizeObserver(schedule);
+ // Size changes are answered before that frame is painted (ResizeObserver runs after layout, before
+ // paint); waiting for the next frame let the definition jump down and back up on a lookup.
+ const observer=new ResizeObserver(()=>{if(frame){cancelAnimationFrame(frame);}align();});
  for(const node of [topbar,workspace,head,quick,dictionary.querySelector('.dict-head'),readingPanel.querySelector('.reader-inputs')])if(node)observer.observe(node);
  new MutationObserver(schedule).observe(dictionary,{attributes:true,attributeFilter:['hidden']});
  addEventListener('resize',schedule);addEventListener('reader-layout',schedule);
@@ -263,8 +265,9 @@
  const wheelUp=event=>{if(enabled&&event.deltaY<-4&&performance.now()>=quietUntil)reveal();};
  tabs.addEventListener('scroll',()=>watch(tabs,tabs.scrollTop),{passive:true});
  tabs.addEventListener('wheel',wheelUp,{passive:true});
- frame.addEventListener('load',()=>{
-  let win,doc;try{win=frame.contentWindow;doc=frame.contentDocument;}catch{return;}
+ // Both entry frames: they take turns showing entries (dictionary.js).
+ for(const entryFrame of frame.parentElement.querySelectorAll('iframe'))entryFrame.addEventListener('load',()=>{
+  let win,doc;try{win=entryFrame.contentWindow;doc=entryFrame.contentDocument;}catch{return;}
   if(!win||!doc)return;
   quiet(300);positions.set(win,{y:win.scrollY,acc:0});
   win.addEventListener('scroll',()=>watch(win,win.scrollY),{passive:true});
@@ -573,8 +576,8 @@
   lookup.attach=doc=>{attach(doc);try{if(doc&&!doc.__readerDrawer){doc.__readerDrawer=true;watch(doc);}}catch{}};
  }
  // Esc also works while reading inside a dictionary entry.
- const entryFrame=$('dict-frame');
- entryFrame?.addEventListener('load',()=>{try{const doc=entryFrame.contentDocument;if(doc&&!doc.__readerDrawer){doc.__readerDrawer=true;doc.addEventListener('keydown',onKey);}}catch{}});
+ for(const entryFrame of $('dict-frame')?.parentElement?.querySelectorAll('iframe')||[])   // both entry frames (dictionary.js)
+  entryFrame.addEventListener('load',()=>{try{const doc=entryFrame.contentDocument;if(doc&&!doc.__readerDrawer){doc.__readerDrawer=true;doc.addEventListener('keydown',onKey);}}catch{}});
 
  // Width: drag the drawer's left edge; double-click to reset. Saved with your reader preferences.
  const paintWidth=()=>{if(width)workspace.style.setProperty('--dict-drawer-w',Math.round(width)+'px');else workspace.style.removeProperty('--dict-drawer-w');};
